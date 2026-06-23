@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "epl-cds"
+version = "0.1.0"
+description = "EPL-CDS: LLM-assisted clinical decision support for early pregnancy loss (research/validation study)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["epl_cds*"]
+
+[tool.setuptools.package-data]
+"epl_cds.knowledge" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

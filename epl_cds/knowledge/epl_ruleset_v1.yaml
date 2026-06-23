@@ -1,0 +1,135 @@
+# EPL ruleset v1 — frozen, versioned clinical knowledge.
+#
+# !!! UNVERIFIED !!!
+# Every numeric threshold below is transcribed from the cited guideline and
+# MUST be confirmed by a domain expert before any study use. Do NOT edit a
+# threshold to make a test pass (see CLAUDE.md). A failing test means the
+# engine is wrong, not the threshold. Threshold changes require expert sign-off
+# AND a new ruleset `version`.
+#
+# Primary source:
+#   Doubilet PM, Benson CB, Bourne T, Blaivas M, et al. "Diagnostic Criteria for
+#   Nonviable Pregnancy Early in the First Trimester." N Engl J Med
+#   2013;369:1443-1451. Society of Radiologists in Ultrasound (SRU)
+#   Multispecialty Consensus Conference on Early First Trimester Diagnosis of
+#   Miscarriage and Exclusion of a Viable Intrauterine Pregnancy.
+# Cross-referenced:
+#   ACOG Practice Bulletin No. 200, "Early Pregnancy Loss" (2018).
+
+version: "v1"
+source: >
+  SRU 2013 Multispecialty Consensus Conference (Doubilet et al., NEJM
+  2013;369:1443-1451), cross-referenced with ACOG Practice Bulletin No. 200
+  (2018).
+status: >
+  UNVERIFIED — every threshold is transcribed from the cited guideline and
+  awaits domain-expert sign-off before study use.
+
+rules:
+  # ---------------------- DIAGNOSTIC of pregnancy loss ----------------------
+  - id: crl_no_cardiac
+    tier: diagnostic
+    description: "Crown-rump length >= threshold with no cardiac activity."
+    citation: "SRU 2013 (NEJM 2013;369:1443) — Findings diagnostic of pregnancy failure."
+    verify: true
+    params:
+      crl_mm: 7.0
+
+  - id: msd_no_embryo
+    tier: diagnostic
+    description: "Mean sac diameter >= threshold with no embryo."
+    citation: "SRU 2013 (NEJM 2013;369:1443) — Findings diagnostic of pregnancy failure."
+    verify: true
+    params:
+      msd_mm: 25.0
+
+  - id: interval_no_yolk
+    tier: diagnostic
+    description: >
+      No embryo with a heartbeat at or beyond N days after a scan that showed a
+      gestational sac WITHOUT a yolk sac.
+    citation: "SRU 2013 (NEJM 2013;369:1443) — Findings diagnostic of pregnancy failure."
+    verify: true
+    params:
+      days: 14
+
+  - id: interval_with_yolk
+    tier: diagnostic
+    description: >
+      No embryo with a heartbeat at or beyond N days after a scan that showed a
+      gestational sac WITH a yolk sac.
+    citation: "SRU 2013 (NEJM 2013;369:1443) — Findings diagnostic of pregnancy failure."
+    verify: true
+    params:
+      days: 11
+
+  # ----------------- SUSPICIOUS FOR (not diagnostic of) loss ----------------
+  - id: crl_small_no_cardiac
+    tier: suspicious
+    description: "Crown-rump length < threshold with no cardiac activity."
+    citation: "SRU 2013 (NEJM 2013;369:1443) — Findings suspicious for, but not diagnostic of, pregnancy failure."
+    verify: true
+    params:
+      crl_max_mm: 7.0
+
+  - id: msd_intermediate_no_embryo
+    tier: suspicious
+    description: "Mean sac diameter in [min, max) mm with no embryo."
+    citation: "SRU 2013 — MSD 16-24 mm with no embryo."
+    verify: true
+    params:
+      msd_min_mm: 16.0
+      msd_max_mm: 25.0
+
+  - id: interval_no_yolk_suspicious
+    tier: suspicious
+    description: >
+      No embryo with a heartbeat [min, max) days after a scan that showed a
+      gestational sac WITHOUT a yolk sac.
+    citation: "SRU 2013 — 7-13 days after a sac without a yolk sac."
+    verify: true
+    params:
+      days_min: 7
+      days_max: 14
+
+  - id: interval_with_yolk_suspicious
+    tier: suspicious
+    description: >
+      No embryo with a heartbeat [min, max) days after a scan that showed a
+      gestational sac WITH a yolk sac.
+    citation: "SRU 2013 — 7-10 days after a sac with a yolk sac."
+    verify: true
+    params:
+      days_min: 7
+      days_max: 11
+
+  - id: enlarged_yolk_sac
+    tier: suspicious
+    description: "Yolk sac diameter > threshold."
+    citation: "SRU 2013 — enlarged yolk sac (> 7 mm)."
+    verify: true
+    params:
+      max_mm: 7.0
+
+  - id: empty_amnion
+    tier: suspicious
+    description: "Amnion seen adjacent to the yolk sac with no visible embryo (empty-amnion sign)."
+    citation: "SRU 2013 — empty amnion sign."
+    verify: true
+    params: {}
+
+  - id: small_sac_relative_to_embryo
+    tier: suspicious
+    description: "Difference between mean sac diameter and crown-rump length < threshold."
+    citation: "SRU 2013 — small sac size relative to the embryo (< 5 mm difference between MSD and CRL)."
+    verify: true
+    params:
+      min_diff_mm: 5.0
+
+  - id: no_embryo_by_lmp
+    tier: suspicious
+    description: "No embryo at or beyond N days after the last menstrual period."
+    citation: "SRU 2013 — absence of embryo >= 6 weeks after the last menstrual period."
+    verify: true
+    params:
+      days: 42

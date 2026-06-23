@@ -1,0 +1,62 @@
+# EPL-CDS
+
+LLM-assisted clinical decision support for **early pregnancy loss (EPL)**, built
+as a single-site **research/validation study** — not a production medical device.
+
+> **The one rule:** the LLM extracts facts; a deterministic engine makes the
+> diagnosis. See [`CLAUDE.md`](CLAUDE.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## ⚠️ Clinical-knowledge status
+
+The thresholds in `epl_cds/knowledge/epl_ruleset_v1.yaml` are transcribed from
+the SRU 2013 consensus criteria (Doubilet et al., *NEJM* 2013;369:1443) and are
+marked **`verify: true` / UNVERIFIED**. They MUST be confirmed by a domain expert
+before any study use. Do not edit a threshold to make a test pass.
+
+## Quickstart
+
+```bash
+pip install -e .            # install the package (and PyYAML)
+pip install -e ".[dev]"     # + pytest
+pytest -q                   # engine boundary tests + layer tests
+python scripts/run_study.py # offline batch demo (deterministic stub, no API key)
+```
+
+## Layout
+
+```
+epl_cds/
+  contracts.py          cross-layer dataclasses (the only shared import)
+  knowledge/            frozen versioned ruleset + loader + validator
+  extraction/           the ONLY LLM: text -> Facts (provider-agnostic llm_fn)
+  reasoning/            deterministic engine: (Facts, Ruleset) -> Determination
+  study/                CaseRecord, append-only JSONL log, two-arm metrics
+  pipeline.py           orchestrator (extraction -> reasoning -> record)
+config/study_config.yaml safety gates (IRB, de-identification, sign-off)
+scripts/run_study.py    offline demo
+tests/                  boundary tests pinning clinical thresholds
+```
+
+## Plugging in a real model
+
+Extraction is provider-agnostic. Implement any `llm_fn` matching
+`contracts.LLMFn` — `(prompt: str) -> str` returning JSON — and pass it to
+`pipeline.run_case(..., llm_fn=...)`. Tests and the demo use an offline stub, so
+no provider client is bundled.
+
+```python
+from epl_cds.knowledge import load_ruleset
+from epl_cds.pipeline import run_case
+
+def my_llm_fn(prompt: str) -> str:
+    ...  # call your provider, return the model's JSON text
+
+record = run_case("case-1", report_text, llm_fn=my_llm_fn, ruleset=load_ruleset())
+print(record.result.determination, record.result.rationale)
+```
+
+## Scope & safety
+
+Decision **support**, never autonomous diagnosis. The "suspicious" tier
+recommends follow-up only. No real patient data until every gate in
+`config/study_config.yaml` is satisfied.

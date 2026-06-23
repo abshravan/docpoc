@@ -1,0 +1,17 @@
+# Study configuration and safety gates.
+#
+# `gates` must ALL be true before any real patient data is ingested. Until then
+# the pipeline runs only on synthetic / de-identified fixtures. Do not add code
+# that ingests PHI while any gate is false (see CLAUDE.md).
+
+study:
+  name: "EPL-CDS single-site validation"
+  ruleset_version: "v1"           # must match epl_cds/knowledge/epl_ruleset_v1.yaml
+
+gates:
+  irb_approved: false             # IRB / ethics approval obtained
+  deidentified: false             # inputs confirmed de-identified
+  expert_thresholds_signed_off: false  # ruleset thresholds confirmed by expert
+
+paths:
+  case_log: "data/case_log.jsonl"
