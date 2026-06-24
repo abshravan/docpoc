@@ -84,6 +84,16 @@ Kept strictly separable:
 
 Neither function blends the arms.
 
+## Presentation (`webapp/`, optional)
+
+A thin Flask demo that consumes only the public API (`pipeline`, `extraction`,
+`reasoning`, `knowledge`) — it adds no clinical logic. Its three panels mirror
+the firewall: `/api/extract` runs the LLM (optional, needs a provider),
+`/api/evaluate` runs the pure engine (always available). The extracted facts are
+human-editable between the two, so the model never reaches the determination
+unmediated. Real providers live in `extraction/providers.py` (lazy import,
+optional dependency) and are never touched by the test suite.
+
 ## Reproducibility & safety invariants
 
 1. The engine is a pure function of `(Facts, Ruleset)` — no LLM, no randomness,

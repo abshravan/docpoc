@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPL-CDS — research demo</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="disclaimer">
+    <strong>Research decision-support demo — not a medical device.</strong>
+    This tool does <em>not</em> make a diagnosis. The LLM only proposes facts; a
+    clinician must verify them; a deterministic engine then reports whether
+    published criteria are met. A “suspicious” result recommends follow-up only.
+    <span class="status">Ruleset {{ ruleset_version }} — {{ ruleset_status }}</span>
+  </header>
+
+  <main>
+    <!-- PANEL 1: extraction (the only LLM step) -->
+    <section class="panel" id="panel-extract">
+      <h2>1 · Extraction <span class="tag tag-llm">LLM</span></h2>
+      {% if extraction_enabled %}
+        <p class="muted">Model: {{ extractor_model }}. The model returns structured
+        facts only — never a determination.</p>
+      {% else %}
+        <p class="muted warn">No model configured — extraction is disabled. Set a
+        provider (e.g. <code>ANTHROPIC_API_KEY</code>) to enable it, or enter the
+        facts manually in panel 2.</p>
+      {% endif %}
+      <textarea id="note" rows="10" placeholder="Paste an ultrasound report…"></textarea>
+      <button id="extract-btn" {% if not extraction_enabled %}disabled{% endif %}>
+        Extract facts →
+      </button>
+      <p id="extract-msg" class="msg"></p>
+    </section>
+
+    <!-- PANEL 2: human-verified facts (the firewall) -->
+    <section class="panel" id="panel-facts">
+      <h2>2 · Verify facts <span class="tag tag-human">Clinician</span></h2>
+      <p class="muted">Correct anything the model got wrong. The engine only
+      sees what you confirm here. Leave a field blank for “not documented”.</p>
+      <form id="facts-form" class="facts-grid">
+        <label>Crown-rump length (mm)
+          <input type="number" step="0.1" name="crl_mm" /></label>
+        <label>Cardiac activity
+          <select name="cardiac_activity">
+            <option value="">unknown</option>
+            <option value="true">present</option>
+            <option value="false">absent</option>
+          </select></label>
+        <label>Mean sac diameter (mm)
+          <input type="number" step="0.1" name="msd_mm" /></label>
+        <label>Embryo visible
+          <select name="embryo_visible">
+            <option value="">unknown</option>
+            <option value="true">yes</option>
+            <option value="false">no</option>
+          </select></label>
+        <label>Yolk sac visible
+          <select name="yolk_sac_visible">
+            <option value="">unknown</option>
+            <option value="true">yes</option>
+            <option value="false">no</option>
+          </select></label>
+        <label>Yolk sac diameter (mm)
+          <input type="number" step="0.1" name="yolk_sac_diameter_mm" /></label>
+        <label>Amnion visible
+          <select name="amnion_visible">
+            <option value="">unknown</option>
+            <option value="true">yes</option>
+            <option value="false">no</option>
+          </select></label>
+        <label>Days since prior scan — sac <em>without</em> yolk
+          <input type="number" step="1" name="days_since_sac_without_yolk" /></label>
+        <label>Days since prior scan — sac <em>with</em> yolk
+          <input type="number" step="1" name="days_since_sac_with_yolk" /></label>
+        <label>Days since last menstrual period
+          <input type="number" step="1" name="days_since_lmp" /></label>
+      </form>
+      <button id="evaluate-btn">Run deterministic engine →</button>
+    </section>
+
+    <!-- PANEL 3: deterministic determination -->
+    <section class="panel" id="panel-result">
+      <h2>3 · Determination <span class="tag tag-engine">Deterministic</span></h2>
+      <p class="muted">No AI here. A pure function of (facts, ruleset {{ ruleset_version }}).</p>
+      <div id="result" class="result-empty">Run the engine to see a result.</div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Prompt version {{ prompt_version }} · Ruleset {{ ruleset_version }}</span>
+    <span>Thresholds are unverified and awaiting expert sign-off.</span>
+  </footer>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

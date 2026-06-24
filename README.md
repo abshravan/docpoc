@@ -17,9 +17,10 @@ before any study use. Do not edit a threshold to make a test pass.
 
 ```bash
 pip install -e .            # install the package (and PyYAML)
-pip install -e ".[dev]"     # + pytest
+pip install -e ".[dev]"     # + pytest + Flask (for the webapp tests)
 pytest -q                   # engine boundary tests + layer tests
 python scripts/run_study.py # offline batch demo (deterministic stub, no API key)
+python -m webapp            # clinician-facing demo UI at http://127.0.0.1:5000
 ```
 
 ## Layout
@@ -36,6 +37,28 @@ config/study_config.yaml safety gates (IRB, de-identification, sign-off)
 scripts/run_study.py    offline demo
 tests/                  boundary tests pinning clinical thresholds
 ```
+
+## Clinician-facing demo UI
+
+`python -m webapp` serves a three-panel page that makes the firewall visible:
+
+1. **Extraction (LLM)** — paste a report; the model proposes structured facts only.
+2. **Verify facts (clinician)** — an editable form; the engine sees only what you confirm.
+3. **Determination (deterministic)** — the tier, the criteria that fired with
+   their citations, and the rationale. No AI in this step.
+
+It runs offline: with no provider configured, panel 1 is disabled and you enter
+facts manually in panel 2 to drive the engine. To enable extraction, install and
+configure a provider:
+
+```bash
+pip install -e ".[webapp,anthropic]"
+ANTHROPIC_API_KEY=... python -m webapp        # or EPL_LLM_PROVIDER=anthropic
+EPL_LLM_MODEL=...                              # optional model override
+```
+
+The UI is a research demo — clearly labeled decision support, not a diagnosis or
+a medical device. "Suspicious" recommends follow-up only.
 
 ## Plugging in a real model
 
