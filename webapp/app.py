@@ -17,7 +17,9 @@ import uuid
 from dataclasses import asdict
 from typing import Any, Iterator, Optional
 
-from flask import Flask, Response, jsonify, render_template, request
+from pathlib import Path
+
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from epl_cds.contracts import Facts, LLMFn, Ruleset
 from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
@@ -130,8 +132,16 @@ def create_app(
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
 
+    # Single-process production: serve the built React SPA when EPL_SERVE_FRONTEND=1
+    # and a build exists. Dev uses the Vite server (port 5173) against this API.
+    dist_dir = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    serve_frontend = os.environ.get("EPL_SERVE_FRONTEND") == "1" and (dist_dir / "index.html").exists()
+
     @app.get("/")
-    def index() -> str:
+    def index():
+        if serve_frontend:
+            return send_from_directory(dist_dir, "index.html")
+        # Lightweight no-build fallback (also what the test suite exercises).
         return render_template(
             "index.html",
             ruleset_version=rules.version,
@@ -141,6 +151,12 @@ def create_app(
             extraction_enabled=resolved_llm is not None,
             extractor_model=extractor_model,
         )
+
+    if serve_frontend:
+
+        @app.get("/assets/<path:filename>")
+        def assets(filename: str):
+            return send_from_directory(dist_dir / "assets", filename)
 
     @app.post("/api/extract")
     def api_extract():

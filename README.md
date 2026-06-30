@@ -30,9 +30,13 @@ epl_cds/
   contracts.py          cross-layer dataclasses (the only shared import)
   knowledge/            frozen versioned ruleset + loader + validator
   extraction/           the ONLY LLM: text -> Facts (provider-agnostic llm_fn)
+    providers.py        optional real llm_fn adapters (Anthropic, Ollama/Gemma)
+    baseline.py         NON-authoritative LLM opinion (research comparison only)
   reasoning/            deterministic engine: (Facts, Ruleset) -> Determination
   study/                CaseRecord, append-only JSONL log, two-arm metrics
   pipeline.py           orchestrator (extraction -> reasoning -> record)
+webapp/                 Flask JSON/SSE API (+ AG-UI extract stream, Jinja fallback)
+frontend/               React + TS + Tailwind + shadcn/ui SPA (AG-UI client)
 config/study_config.yaml safety gates (IRB, de-identification, sign-off)
 scripts/run_study.py    offline demo
 tests/                  boundary tests pinning clinical thresholds
@@ -40,30 +44,48 @@ tests/                  boundary tests pinning clinical thresholds
 
 ## Clinician-facing demo UI
 
-`python -m webapp` serves a three-panel page that makes the firewall visible:
+A React (Vite + TypeScript + Tailwind + shadcn/ui) front end with a Flask JSON/SSE
+API backend. Three panels make the firewall visible:
 
-1. **Extraction (LLM)** — paste a report; the model proposes structured facts only.
-2. **Verify facts (clinician)** — an editable form; the engine sees only what you confirm.
-3. **Determination (deterministic)** — the tier, the criteria that fired with
-   their citations, and the rationale. No AI in this step.
+1. **Extraction (LLM)** — paste a report; the model proposes structured facts only,
+   streamed to the UI over the **AG-UI protocol** (`@ag-ui/core` events via SSE).
+2. **Verify facts (clinician)** — an editable form bound to the AG-UI agent state;
+   the engine sees only what you confirm.
+3. **Conclusions** — the **deterministic engine** determination (authoritative,
+   with fired-rule citations) shown next to a **non-authoritative LLM baseline**
+   ("what an unconstrained model would say — not used for the decision"), with a
+   badge flagging when the two disagree.
 
-It runs offline: with no provider configured, panel 1 is disabled and you enter
-facts manually in panel 2 to drive the engine. To enable extraction, install and
-configure a provider:
+The LLM baseline is a research comparison only; it never feeds the engine or the
+CaseRecord determination (`epl_cds/extraction/baseline.py`).
+
+### Run it
+
+Backend (API) + frontend (Vite dev server) in two terminals:
 
 ```bash
-# Local model via Ollama (e.g. Gemma) — no API key, no extra Python deps:
-EPL_LLM_PROVIDER=ollama EPL_LLM_MODEL=gemma3 python -m webapp
-# EPL_OLLAMA_HOST defaults to http://localhost:11434
+# 1) API backend on :5000  — pick a provider, or none for manual-entry mode
+EPL_LLM_PROVIDER=ollama EPL_LLM_MODEL=gemma3 python -m webapp   # local Gemma via Ollama
+#   EPL_OLLAMA_HOST defaults to http://localhost:11434
+#   ANTHROPIC_API_KEY=... python -m webapp                      # or a hosted provider
 
-# Or a hosted provider:
-pip install -e ".[webapp,anthropic]"
-ANTHROPIC_API_KEY=... python -m webapp        # or EPL_LLM_PROVIDER=anthropic
-EPL_LLM_MODEL=...                              # optional model override
+# 2) Frontend dev server on :5173 (proxies /api -> :5000)
+cd frontend && npm install && npm run dev
 ```
 
-The UI is a research demo — clearly labeled decision support, not a diagnosis or
-a medical device. "Suspicious" recommends follow-up only.
+Open **http://localhost:5173**. With no provider configured, panel 1 is disabled
+and you enter facts manually in panel 2 to drive the engine offline.
+
+Single-process production (Flask serves the built SPA):
+
+```bash
+cd frontend && npm run build && cd ..
+EPL_SERVE_FRONTEND=1 EPL_LLM_PROVIDER=ollama python -m webapp   # serves UI + API on :5000
+```
+
+There is also a dependency-free Jinja fallback UI at `/` when `EPL_SERVE_FRONTEND`
+is unset (handy for a quick look without Node). It is a research demo — clearly
+labeled decision support, not a diagnosis or a medical device.
 
 ## Plugging in a real model
 
