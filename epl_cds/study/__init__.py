@@ -5,14 +5,22 @@ Keeps the two study arms separable (see CLAUDE.md):
   Arm 2 — reasoning accuracy (engine determination vs expert adjudication).
 """
 
+from epl_cds.study.corpus import CaseSpec, load_cases
 from epl_cds.study.log import append_record, read_log
-from epl_cds.study.metrics import arm1_extraction_accuracy, arm2_reasoning_accuracy
+from epl_cds.study.metrics import (
+    arm1_extraction_accuracy,
+    arm2_reasoning_accuracy,
+    determination_flip_analysis,
+)
 from epl_cds.study.records import record_to_dict
 
 __all__ = [
+    "CaseSpec",
+    "load_cases",
     "append_record",
     "read_log",
     "record_to_dict",
     "arm1_extraction_accuracy",
     "arm2_reasoning_accuracy",
+    "determination_flip_analysis",
 ]

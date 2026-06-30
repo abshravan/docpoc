@@ -19,9 +19,31 @@ before any study use. Do not edit a threshold to make a test pass.
 pip install -e .            # install the package (and PyYAML)
 pip install -e ".[dev]"     # + pytest + Flask (for the webapp tests)
 pytest -q                   # engine boundary tests + layer tests
-python scripts/run_study.py # offline batch demo (deterministic stub, no API key)
+python scripts/run_study.py # batch-evaluate the example corpus (stub, no API key)
 python -m webapp            # clinician-facing demo UI at http://127.0.0.1:5000
 ```
+
+## Batch evaluation (the study harness)
+
+`scripts/run_study.py` runs a gold-labeled corpus through extraction → engine and
+prints both study arms plus the determination-flip report:
+
+- **Arm 1** — per-fact extraction accuracy (LLM facts vs manual abstraction).
+- **Arm 2** — determination accuracy (engine vs expert adjudication).
+- **Flips** — extraction errors that *changed the engine's output* (the core
+  argument for the firewall). Computed by running the engine on the gold facts
+  too and comparing — still no LLM in the decision.
+
+```bash
+python scripts/run_study.py                       # offline stub (extracts gold verbatim)
+python scripts/run_study.py data/cases.jsonl      # your own corpus
+EPL_LLM_PROVIDER=ollama EPL_LLM_MODEL=gemma3 \
+  python scripts/run_study.py                     # real extraction with local Gemma
+```
+
+Corpus format is one JSON object per line — `note`, `gold_facts`, optional
+`adjudicated_determination` (see `examples/cases.example.jsonl`). Real corpora
+belong under the gitignored `data/` and require the study gates to be satisfied.
 
 ## Layout
 

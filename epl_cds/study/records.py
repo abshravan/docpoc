@@ -37,6 +37,11 @@ def record_from_dict(data: dict[str, Any]) -> CaseRecord:
         if data.get("adjudicated_determination")
         else None
     )
+    gold_determination = (
+        Determination(data["gold_determination"])
+        if data.get("gold_determination")
+        else None
+    )
     return CaseRecord(
         case_id=data["case_id"],
         facts=facts,
@@ -48,4 +53,5 @@ def record_from_dict(data: dict[str, Any]) -> CaseRecord:
         note=data.get("note"),
         gold_facts=gold_facts,
         adjudicated_determination=adjudicated,
+        gold_determination=gold_determination,
     )

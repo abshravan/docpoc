@@ -18,9 +18,17 @@ from epl_cds.contracts import CaseRecord, Determination, Facts
 # Arm 1: extraction accuracy (per fact field)
 # --------------------------------------------------------------------------- #
 @dataclass
+class Mismatch:
+    case_id: str
+    gold: object
+    predicted: object
+
+
+@dataclass
 class FieldScore:
     correct: int = 0
     total: int = 0  # number of cases where the gold value is documented (not None)
+    mismatches: list[Mismatch] = field(default_factory=list)
 
     @property
     def accuracy(self) -> float | None:
@@ -56,8 +64,11 @@ def arm1_extraction_accuracy(records: Iterable[CaseRecord]) -> Arm1Result:
                 continue
             score = result.by_field[name]
             score.total += 1
-            if getattr(rec.facts, name) == gold:
+            predicted = getattr(rec.facts, name)
+            if predicted == gold:
                 score.correct += 1
+            else:
+                score.mismatches.append(Mismatch(rec.case_id, gold, predicted))
     return result
 
 
@@ -93,4 +104,58 @@ def arm2_reasoning_accuracy(records: Iterable[CaseRecord]) -> Arm2Result:
             result.correct += 1
         key = (adjudicated.value, engine.value)
         result.confusion[key] = result.confusion.get(key, 0) + 1
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# Determination flips: extraction errors that changed the engine's output
+# --------------------------------------------------------------------------- #
+@dataclass
+class Flip:
+    case_id: str
+    from_gold: str  # engine determination on the gold (manually abstracted) facts
+    to_extracted: str  # engine determination on the LLM-extracted facts
+
+
+@dataclass
+class FlipResult:
+    total: int = 0  # cases with both an extracted and a gold determination
+    flips: list[Flip] = field(default_factory=list)
+
+    @property
+    def flip_count(self) -> int:
+        return len(self.flips)
+
+    @property
+    def flip_rate(self) -> float | None:
+        return self.flip_count / self.total if self.total else None
+
+    @property
+    def agreement_rate(self) -> float | None:
+        return (self.total - self.flip_count) / self.total if self.total else None
+
+
+def determination_flip_analysis(records: Iterable[CaseRecord]) -> FlipResult:
+    """How often an extraction error changed the engine's determination.
+
+    Compares the engine's determination on the LLM-extracted facts against its
+    determination on the gold (manually abstracted) facts. Both are produced by
+    the same deterministic engine, so any difference is attributable to
+    extraction — this is the metric that quantifies the cost of imperfect
+    extraction on the actual clinical output, and the core argument for the
+    extraction/reasoning firewall.
+    """
+    result = FlipResult()
+    for rec in records:
+        if rec.gold_determination is None:
+            continue
+        result.total += 1
+        if rec.result.determination != rec.gold_determination:
+            result.flips.append(
+                Flip(
+                    case_id=rec.case_id,
+                    from_gold=rec.gold_determination.value,
+                    to_extracted=rec.result.determination.value,
+                )
+            )
     return result

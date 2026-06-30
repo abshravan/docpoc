@@ -142,6 +142,10 @@ class CaseRecord:
     gold_facts: Optional[Facts] = None
     # Arm 2 reference: expert adjudication of the determination.
     adjudicated_determination: Optional[Determination] = None
+    # Engine determination on the gold facts (set when gold_facts is provided).
+    # Comparing this to `result.determination` isolates how much an extraction
+    # error changed the engine's output (the determination-flip metric).
+    gold_determination: Optional[Determination] = None
 
 
 # --------------------------------------------------------------------------- #

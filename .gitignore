@@ -8,6 +8,8 @@ dist/
 .venv/
 venv/
 
-# Study artifacts (never commit case data)
+# Study artifacts (never commit real case data)
 data/
 *.jsonl
+# ...but DO track the synthetic example corpus.
+!examples/cases.example.jsonl

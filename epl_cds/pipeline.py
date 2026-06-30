@@ -38,6 +38,13 @@ def run_case(
     facts = extract_facts(note, llm_fn)
     result = evaluate(facts, ruleset)
 
+    # If a manual abstraction is supplied, also run the engine on those gold
+    # facts. This is still the deterministic engine, never the LLM — it lets the
+    # study measure extraction errors that would have flipped the determination.
+    gold_determination = (
+        evaluate(gold_facts, ruleset).determination if gold_facts is not None else None
+    )
+
     return CaseRecord(
         case_id=case_id,
         facts=facts,
@@ -49,4 +56,5 @@ def run_case(
         note=note if store_note else None,
         gold_facts=gold_facts,
         adjudicated_determination=adjudicated_determination,
+        gold_determination=gold_determination,
     )
