@@ -123,3 +123,19 @@ export function getEvidenceStatus(): Promise<EvidenceStatus> {
 export function askEvidence(question: string): Promise<EvidenceAnswer> {
   return postJson<EvidenceAnswer>("/api/evidence", { question });
 }
+
+export interface DraftResult {
+  yaml: string;
+  rule_count: number;
+  warnings: string[];
+  prompt_version: string;
+  activated: false;
+}
+
+export function draftRuleset(
+  source_text: string,
+  name: string,
+  version: string
+): Promise<DraftResult> {
+  return postJson<DraftResult>("/api/authoring/draft", { source_text, name, version });
+}

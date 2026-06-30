@@ -113,6 +113,24 @@ def test_ruleset_endpoint(client_with_llm):
     assert crl["tier"] == "diagnostic"
 
 
+def test_authoring_draft_disabled_without_provider(client_no_llm):
+    assert client_no_llm.post("/api/authoring/draft", json={"source_text": "x"}).status_code == 503
+
+
+def test_authoring_draft_requires_source(client_with_llm):
+    assert client_with_llm.post("/api/authoring/draft", json={"source_text": " "}).status_code == 400
+
+
+def test_authoring_draft_returns_unactivated_yaml(client_with_llm):
+    # The stub llm returns Facts JSON (no "rules" key), so 0 rules — but the
+    # endpoint must still return draft YAML and never activate anything.
+    resp = client_with_llm.post("/api/authoring/draft", json={"source_text": "a paper"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["activated"] is False
+    assert "DO NOT USE" in data["yaml"]
+
+
 def test_evidence_status_uses_default_corpus(client_with_llm):
     data = client_with_llm.get("/api/evidence/status").get_json()
     assert data["enabled"] is True

@@ -22,6 +22,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from epl_cds.contracts import EmbedFn, Facts, LLMFn, Ruleset
+from epl_cds.extraction.authoring import AUTHORING_PROMPT_VERSION, draft_ruleset
 from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
 from epl_cds.extraction.extractor import ExtractionError, extract_facts
 from epl_cds.extraction.prompts import PROMPT_VERSION
@@ -311,6 +312,36 @@ def create_app(
             synthesized=ans.synthesized,
             prompt_version=ans.prompt_version,
             citations=[{"source": c.source, "text": c.text} for c in ans.citations],
+        )
+
+    @app.post("/api/authoring/draft")
+    def api_authoring_draft():
+        """Draft a candidate ruleset from pasted source text (human review only).
+
+        Returns UNVERIFIED YAML with verify:true on every rule. Never activates a
+        ruleset and never writes to the live knowledge path — promotion is a
+        deliberate human step after expert sign-off.
+        """
+        llm = app.config["EPL_LLM_FN"]
+        if llm is None:
+            return jsonify(error="No model configured for ruleset drafting."), 503
+        data = request.get_json(silent=True) or {}
+        source_text = (data.get("source_text") or "").strip()
+        if not source_text:
+            return jsonify(error="No source text provided."), 400
+        draft = draft_ruleset(
+            source_text,
+            llm,
+            name=str(data.get("name") or "Drafted ruleset"),
+            version=str(data.get("version") or "draft-v1"),
+            source_label=str(data.get("source_label") or "pasted source text"),
+        )
+        return jsonify(
+            yaml=draft.yaml_text,
+            rule_count=draft.rule_count,
+            warnings=draft.warnings,
+            prompt_version=draft.prompt_version,
+            activated=False,
         )
 
     @app.get("/api/rulesets")
