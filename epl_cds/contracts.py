@@ -101,6 +101,26 @@ class DeterminationResult:
 
 
 # --------------------------------------------------------------------------- #
+# BaselineOpinion: a NON-AUTHORITATIVE, end-to-end LLM verdict (research only)
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class BaselineOpinion:
+    """What an unconstrained LLM would conclude directly from the note.
+
+    This exists ONLY as a research comparison baseline — it demonstrates why the
+    deterministic engine is needed and where a raw model diverges. It MUST NEVER
+    feed a determination, a CaseRecord, or anything in `reasoning/`. `determination`
+    is None when the model output could not be parsed into a known tier.
+    """
+
+    determination: Optional[Determination]
+    rationale: str
+    raw: str
+    model: str
+    prompt_version: str
+
+
+# --------------------------------------------------------------------------- #
 # CaseRecord: one fully-traced case (links both study arms)
 # --------------------------------------------------------------------------- #
 @dataclass

@@ -11,16 +11,36 @@ only one that touches a model, and only if an llm_fn was injected/configured.
 
 from __future__ import annotations
 
+import json
+import os
+import uuid
 from dataclasses import asdict
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from epl_cds.contracts import Facts, LLMFn, Ruleset
+from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
 from epl_cds.extraction.extractor import ExtractionError, extract_facts
 from epl_cds.extraction.prompts import PROMPT_VERSION
 from epl_cds.knowledge import load_ruleset
 from epl_cds.reasoning.engine import evaluate
+
+# Canonical AG-UI protocol event types (subset we emit). See https://ag-ui.com.
+AGUI_EVENTS = {
+    "RUN_STARTED": "RUN_STARTED",
+    "RUN_FINISHED": "RUN_FINISHED",
+    "RUN_ERROR": "RUN_ERROR",
+    "TEXT_MESSAGE_START": "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT": "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END": "TEXT_MESSAGE_END",
+    "STATE_SNAPSHOT": "STATE_SNAPSHOT",
+}
+
+
+def _sse(event: dict[str, Any]) -> str:
+    """Encode one AG-UI event as a Server-Sent Events frame."""
+    return f"data: {json.dumps(event)}\n\n"
 
 _BOOL_FIELDS = {"cardiac_activity", "embryo_visible", "yolk_sac_visible", "amnion_visible"}
 _INT_FIELDS = {"days_since_sac_without_yolk", "days_since_sac_with_yolk", "days_since_lmp"}
@@ -100,6 +120,16 @@ def create_app(
     app.config["EPL_LLM_FN"] = resolved_llm
     app.config["EPL_EXTRACTOR_MODEL"] = extractor_model
 
+    cors_origin = os.environ.get("EPL_CORS_ORIGIN", "*")
+
+    @app.after_request
+    def _add_cors(resp):
+        # Allow the Vite dev server (separate origin) to call the API.
+        resp.headers["Access-Control-Allow-Origin"] = cors_origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return resp
+
     @app.get("/")
     def index() -> str:
         return render_template(
@@ -160,6 +190,109 @@ def create_app(
             rationale=result.rationale,
             ruleset_version=result.ruleset_version,
             facts=asdict(facts),
+        )
+
+    @app.get("/api/config")
+    def api_config():
+        return jsonify(
+            extraction_enabled=app.config["EPL_LLM_FN"] is not None,
+            extractor_model=extractor_model,
+            ruleset_version=rules.version,
+            ruleset_status=rules.status,
+            prompt_version=PROMPT_VERSION,
+            baseline_prompt_version=BASELINE_PROMPT_VERSION,
+            fact_fields=list(Facts.field_names()),
+        )
+
+    @app.post("/api/baseline")
+    def api_baseline():
+        """NON-AUTHORITATIVE LLM opinion for research comparison only.
+
+        This never influences /api/evaluate; the deterministic engine remains the
+        sole source of the determination.
+        """
+        llm = app.config["EPL_LLM_FN"]
+        if llm is None:
+            return jsonify(error="No model configured for the LLM baseline."), 503
+        data = request.get_json(silent=True) or {}
+        note = (data.get("note") or "").strip()
+        if not note:
+            return jsonify(error="No report text provided."), 400
+        opinion = llm_baseline_opinion(note, llm, model=extractor_model)
+        return jsonify(
+            determination=opinion.determination.value if opinion.determination else None,
+            rationale=opinion.rationale,
+            model=opinion.model,
+            prompt_version=opinion.prompt_version,
+            authoritative=False,
+        )
+
+    @app.post("/api/agui/extract")
+    def api_agui_extract():
+        """Stream extraction as AG-UI protocol events (SSE).
+
+        The agent proposes Facts as shared state (STATE_SNAPSHOT); the React
+        Verify-facts panel binds to that state. The human edits it before the
+        deterministic engine ever runs.
+        """
+        llm = app.config["EPL_LLM_FN"]
+        data = request.get_json(silent=True) or {}
+        note = (data.get("note") or "").strip()
+        thread_id = data.get("threadId") or uuid.uuid4().hex
+        run_id = data.get("runId") or uuid.uuid4().hex
+
+        def stream() -> Iterator[str]:
+            yield _sse({"type": "RUN_STARTED", "threadId": thread_id, "runId": run_id})
+            msg_id = uuid.uuid4().hex
+            yield _sse({"type": "TEXT_MESSAGE_START", "messageId": msg_id, "role": "assistant"})
+
+            if llm is None:
+                yield _sse({
+                    "type": "TEXT_MESSAGE_CONTENT",
+                    "messageId": msg_id,
+                    "delta": "No model configured — enter facts manually.",
+                })
+                yield _sse({"type": "TEXT_MESSAGE_END", "messageId": msg_id})
+                yield _sse({
+                    "type": "RUN_ERROR",
+                    "message": "Extraction is not configured.",
+                    "code": "no_provider",
+                })
+                return
+
+            if not note:
+                yield _sse({"type": "TEXT_MESSAGE_END", "messageId": msg_id})
+                yield _sse({"type": "RUN_ERROR", "message": "No report text provided."})
+                return
+
+            yield _sse({
+                "type": "TEXT_MESSAGE_CONTENT",
+                "messageId": msg_id,
+                "delta": f"Extracting facts with {extractor_model}…",
+            })
+            yield _sse({"type": "TEXT_MESSAGE_END", "messageId": msg_id})
+
+            try:
+                facts = extract_facts(note, llm)
+            except ExtractionError as exc:
+                yield _sse({"type": "RUN_ERROR", "message": f"Could not parse model output: {exc}"})
+                return
+
+            # The proposed facts become the agent's shared state.
+            yield _sse({
+                "type": "STATE_SNAPSHOT",
+                "snapshot": {"facts": asdict(facts), "promptVersion": PROMPT_VERSION},
+            })
+            yield _sse({"type": "RUN_FINISHED", "threadId": thread_id, "runId": run_id})
+
+        return Response(
+            stream(),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
         )
 
     return app

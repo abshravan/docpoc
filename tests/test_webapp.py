@@ -1,5 +1,7 @@
 """Tests for the demo web app — fully offline via an injected stub llm_fn."""
 
+import json
+
 import pytest
 
 flask = pytest.importorskip("flask")  # skip if Flask isn't installed
@@ -92,3 +94,58 @@ def test_extract_disabled_without_provider(client_no_llm):
         "/api/evaluate", json={"facts": {"msd_mm": 25, "embryo_visible": False}}
     )
     assert ev.get_json()["determination"] == "diagnostic_of_loss"
+
+
+def test_config_endpoint(client_with_llm):
+    data = client_with_llm.get("/api/config").get_json()
+    assert data["extraction_enabled"] is True
+    assert data["ruleset_version"] == "v1"
+    assert "crl_mm" in data["fact_fields"]
+
+
+def test_cors_header_present(client_with_llm):
+    resp = client_with_llm.get("/api/config")
+    assert resp.headers["Access-Control-Allow-Origin"] == "*"
+
+
+def test_baseline_endpoint(client_with_llm):
+    # The stub llm returns Facts JSON, which has no "determination" key, so the
+    # baseline can't parse a tier -> None. That's fine; we assert it's labeled
+    # non-authoritative and reports the prompt version.
+    resp = client_with_llm.post("/api/baseline", json={"note": "CRL 9mm, no FHR"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["authoritative"] is False
+    assert data["prompt_version"]
+
+
+def test_baseline_disabled_without_provider(client_no_llm):
+    assert client_no_llm.post("/api/baseline", json={"note": "x"}).status_code == 503
+
+
+def _read_sse(resp):
+    events = []
+    for chunk in resp.get_data(as_text=True).split("\n\n"):
+        chunk = chunk.strip()
+        if chunk.startswith("data: "):
+            events.append(json.loads(chunk[len("data: "):]))
+    return events
+
+
+def test_agui_extract_streams_facts_as_state(client_with_llm):
+    resp = client_with_llm.post("/api/agui/extract", json={"note": "CRL 9mm, no FHR"})
+    assert resp.status_code == 200
+    assert resp.mimetype == "text/event-stream"
+    events = _read_sse(resp)
+    types = [e["type"] for e in events]
+    assert types[0] == "RUN_STARTED"
+    assert "STATE_SNAPSHOT" in types
+    assert types[-1] == "RUN_FINISHED"
+    snapshot = next(e for e in events if e["type"] == "STATE_SNAPSHOT")
+    assert snapshot["snapshot"]["facts"]["crl_mm"] == 9.0
+
+
+def test_agui_extract_emits_run_error_without_provider(client_no_llm):
+    resp = client_no_llm.post("/api/agui/extract", json={"note": "x"})
+    events = _read_sse(resp)
+    assert any(e["type"] == "RUN_ERROR" for e in events)
