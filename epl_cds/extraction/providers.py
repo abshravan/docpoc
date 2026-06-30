@@ -13,12 +13,13 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from epl_cds.contracts import LLMFn
+from epl_cds.contracts import EmbedFn, LLMFn
 
 # Overridable so the demo is not pinned to one model.
 DEFAULT_ANTHROPIC_MODEL = os.environ.get("EPL_LLM_MODEL", "claude-sonnet-4-6")
 DEFAULT_OLLAMA_MODEL = os.environ.get("EPL_LLM_MODEL", "gemma3")
 DEFAULT_OLLAMA_HOST = os.environ.get("EPL_OLLAMA_HOST", "http://localhost:11434")
+DEFAULT_EMBED_MODEL = os.environ.get("EPL_EMBED_MODEL", "nomic-embed-text")
 
 
 def anthropic_llm_fn(
@@ -90,6 +91,48 @@ def ollama_llm_fn(
         return payload.get("response", "")
 
     return _fn
+
+
+def ollama_embed_fn(
+    model: str = DEFAULT_EMBED_MODEL,
+    *,
+    host: str = DEFAULT_OLLAMA_HOST,
+    timeout: float = 60.0,
+) -> EmbedFn:
+    """Return an embedding function backed by a local Ollama embedding model.
+
+    Stdlib-only. Requires an embedding model pulled in Ollama (e.g.
+    `nomic-embed-text`); set EPL_EMBED_MODEL to override.
+    """
+    import json
+    import urllib.request
+
+    base = host.rstrip("/")
+
+    def _embed(text: str) -> list[float]:
+        body = json.dumps({"model": model, "prompt": text}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base}/api/embeddings",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return [float(x) for x in payload.get("embedding", [])]
+
+    return _embed
+
+
+def default_embed_fn_from_env() -> Optional[EmbedFn]:
+    """Resolve an embedding function from the environment.
+
+    EPL_EMBED_PROVIDER=ollama uses the local embedding model. Otherwise returns
+    None and callers fall back to the offline hashing embedder.
+    """
+    provider = os.environ.get("EPL_EMBED_PROVIDER", "").strip().lower()
+    if provider == "ollama":
+        return ollama_embed_fn()
+    return None
 
 
 def default_llm_fn_from_env() -> Optional[LLMFn]:

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
-import { Activity, Stethoscope, Workflow } from "lucide-react";
+import { Activity, BookOpen, Stethoscope, Workflow } from "lucide-react";
 import { StoreProvider } from "@/store";
 import { AssessmentPage } from "@/pages/AssessmentPage";
 import { FlowPage } from "@/pages/FlowPage";
+import { EvidencePage } from "@/pages/EvidencePage";
 import { cn } from "@/lib/utils";
 
 function NavTab({ to, icon, children }: { to: string; icon: ReactNode; children: ReactNode }) {
@@ -57,6 +58,9 @@ export default function App() {
                 <NavTab to="/flow" icon={<Workflow className="h-4 w-4" />}>
                   Decision flow
                 </NavTab>
+                <NavTab to="/evidence" icon={<BookOpen className="h-4 w-4" />}>
+                  Evidence
+                </NavTab>
               </nav>
             </div>
           </header>
@@ -65,6 +69,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<AssessmentPage />} />
               <Route path="/flow" element={<FlowPage />} />
+              <Route path="/evidence" element={<EvidencePage />} />
             </Routes>
           </main>
 

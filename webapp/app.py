@@ -21,10 +21,11 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
-from epl_cds.contracts import Facts, LLMFn, Ruleset
+from epl_cds.contracts import EmbedFn, Facts, LLMFn, Ruleset
 from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
 from epl_cds.extraction.extractor import ExtractionError, extract_facts
 from epl_cds.extraction.prompts import PROMPT_VERSION
+from epl_cds.extraction.rag import VectorStore, answer_question, hashing_embed_fn
 from epl_cds.knowledge import load_all_rulesets, load_ruleset
 from epl_cds.reasoning.engine import compare_rulesets, evaluate, is_concordant
 
@@ -43,6 +44,19 @@ AGUI_EVENTS = {
 def _sse(event: dict[str, Any]) -> str:
     """Encode one AG-UI event as a Server-Sent Events frame."""
     return f"data: {json.dumps(event)}\n\n"
+
+
+def _ingest_default_corpus(store: VectorStore) -> None:
+    """Ingest the shipped example notes plus any files under data/papers/."""
+    root = Path(__file__).resolve().parents[1]
+    example = root / "examples" / "evidence_notes.md"
+    if example.exists():
+        store.add_text(example.read_text(encoding="utf-8"), example.name)
+    papers = root / "data" / "papers"
+    if papers.is_dir():
+        for path in sorted(papers.glob("*")):
+            if path.suffix.lower() in {".md", ".txt"}:
+                store.add_text(path.read_text(encoding="utf-8"), path.name)
 
 _BOOL_FIELDS = {"cardiac_activity", "embryo_visible", "yolk_sac_visible", "amnion_visible"}
 _INT_FIELDS = {"days_since_sac_without_yolk", "days_since_sac_with_yolk", "days_since_lmp"}
@@ -101,6 +115,8 @@ def create_app(
     ruleset: Optional[Ruleset] = None,
     *,
     extractor_model: str = "configured-provider",
+    embed_fn: Optional[EmbedFn] = None,
+    evidence_corpus: Optional[list[tuple[str, str]]] = None,
 ) -> Flask:
     """Application factory.
 
@@ -120,9 +136,28 @@ def create_app(
 
         resolved_llm = default_llm_fn_from_env()
 
+    # RAG evidence store: a real embedding model if configured, else the
+    # offline hashing embedder so retrieval always works without a network.
+    resolved_embed = embed_fn
+    embed_provider = "injected"
+    if resolved_embed is None:
+        from epl_cds.extraction.providers import default_embed_fn_from_env
+
+        resolved_embed = default_embed_fn_from_env()
+        embed_provider = "ollama" if resolved_embed is not None else "offline-hashing"
+    if resolved_embed is None:
+        resolved_embed = hashing_embed_fn()
+    store = VectorStore(resolved_embed)
+    if evidence_corpus is not None:
+        for text, source in evidence_corpus:
+            store.add_text(text, source)
+    else:
+        _ingest_default_corpus(store)
+
     app.config["EPL_RULESET"] = rules
     app.config["EPL_LLM_FN"] = resolved_llm
     app.config["EPL_EXTRACTOR_MODEL"] = extractor_model
+    app.config["EPL_STORE"] = store
 
     cors_origin = os.environ.get("EPL_CORS_ORIGIN", "*")
 
@@ -248,6 +283,34 @@ def create_app(
                 }
                 for r in rules.rules
             ],
+        )
+
+    @app.get("/api/evidence/status")
+    def api_evidence_status():
+        return jsonify(
+            enabled=store.size > 0,
+            chunks=store.size,
+            sources=store.sources,
+            embed_provider=embed_provider,
+            synthesis=resolved_llm is not None,
+        )
+
+    @app.post("/api/evidence")
+    def api_evidence():
+        """Retrieve cited passages for a question and (if a model is available)
+        synthesize a grounded answer. Explainability only — no determination."""
+        if store.size == 0:
+            return jsonify(error="No evidence corpus is loaded."), 503
+        data = request.get_json(silent=True) or {}
+        question = (data.get("question") or "").strip()
+        if not question:
+            return jsonify(error="No question provided."), 400
+        ans = answer_question(question, store, llm_fn=resolved_llm)
+        return jsonify(
+            answer=ans.answer,
+            synthesized=ans.synthesized,
+            prompt_version=ans.prompt_version,
+            citations=[{"source": c.source, "text": c.text} for c in ans.citations],
         )
 
     @app.get("/api/rulesets")

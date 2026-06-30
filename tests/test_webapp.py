@@ -113,6 +113,27 @@ def test_ruleset_endpoint(client_with_llm):
     assert crl["tier"] == "diagnostic"
 
 
+def test_evidence_status_uses_default_corpus(client_with_llm):
+    data = client_with_llm.get("/api/evidence/status").get_json()
+    assert data["enabled"] is True
+    assert data["chunks"] > 0
+    assert any("evidence" in s for s in data["sources"])
+
+
+def test_evidence_query_returns_citations(client_with_llm):
+    resp = client_with_llm.post("/api/evidence", json={"question": "CRL threshold for no heartbeat?"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["citations"]
+    # The stub llm returns Facts JSON, but synthesis is still attempted; the
+    # citations are what matter for grounding.
+    assert "synthesized" in data
+
+
+def test_evidence_requires_question(client_with_llm):
+    assert client_with_llm.post("/api/evidence", json={"question": " "}).status_code == 400
+
+
 def test_rulesets_list_endpoint(client_with_llm):
     data = client_with_llm.get("/api/rulesets").get_json()
     labels = {r["label"] for r in data["rulesets"]}

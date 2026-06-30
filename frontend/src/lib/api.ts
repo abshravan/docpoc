@@ -95,3 +95,31 @@ export function compareRulesets(facts: Facts): Promise<ComparisonResult> {
   for (const [k, v] of Object.entries(facts)) if (v !== null) clean[k] = v;
   return postJson<ComparisonResult>("/api/compare", { facts: clean });
 }
+
+export interface EvidenceCitation {
+  source: string;
+  text: string;
+}
+
+export interface EvidenceStatus {
+  enabled: boolean;
+  chunks: number;
+  sources: string[];
+  embed_provider: string;
+  synthesis: boolean;
+}
+
+export interface EvidenceAnswer {
+  answer: string;
+  synthesized: boolean;
+  prompt_version: string;
+  citations: EvidenceCitation[];
+}
+
+export function getEvidenceStatus(): Promise<EvidenceStatus> {
+  return fetch("/api/evidence/status").then((r) => r.json());
+}
+
+export function askEvidence(question: string): Promise<EvidenceAnswer> {
+  return postJson<EvidenceAnswer>("/api/evidence", { question });
+}

@@ -172,3 +172,11 @@ class LLMFn(Protocol):
     so tests run offline against a stub with no API key."""
 
     def __call__(self, prompt: str) -> str: ...  # pragma: no cover - protocol
+
+
+class EmbedFn(Protocol):
+    """A provider-agnostic embedding callable: text -> dense vector. Injected
+    into the RAG store so retrieval runs offline against a deterministic local
+    embedder (no network) or against a real embedding model."""
+
+    def __call__(self, text: str) -> list[float]: ...  # pragma: no cover - protocol
