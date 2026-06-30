@@ -4,28 +4,34 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    --background: 220 33% 98%;
+    --foreground: 222 47% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 222 47% 16%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 94%;
-    --secondary-foreground: 222 47% 16%;
-    --muted: 210 40% 94%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 210 40% 94%;
-    --accent-foreground: 222 47% 16%;
-    --destructive: 0 72% 45%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
-    --ring: 222 47% 16%;
-    --radius: 0.6rem;
+    --card-foreground: 222 47% 12%;
 
-    --diagnostic: 0 72% 45%;
-    --suspicious: 38 92% 38%;
-    --ok: 142 60% 32%;
+    /* Brand: indigo → violet, distinct from the clinical tier colors. */
+    --primary: 243 75% 58%;
+    --primary-foreground: 0 0% 100%;
+    --brand-from: 243 75% 58%;
+    --brand-to: 268 75% 56%;
+
+    --secondary: 226 40% 96%;
+    --secondary-foreground: 243 40% 24%;
+    --muted: 220 30% 95%;
+    --muted-foreground: 220 12% 45%;
+    --accent: 243 60% 96%;
+    --accent-foreground: 243 50% 30%;
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 25% 90%;
+    --input: 220 25% 88%;
+    --ring: 243 75% 58%;
+    --radius: 0.7rem;
+
+    /* Clinical tier accents. */
+    --diagnostic: 0 72% 48%;
+    --suspicious: 35 92% 42%;
+    --ok: 152 56% 34%;
   }
 }
 
@@ -36,5 +42,28 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    background-image:
+      radial-gradient(at 100% 0%, hsl(243 75% 58% / 0.06) 0px, transparent 50%),
+      radial-gradient(at 0% 0%, hsl(268 75% 56% / 0.05) 0px, transparent 45%);
+    background-attachment: fixed;
   }
+}
+
+@layer components {
+  .brand-gradient {
+    background-image: linear-gradient(
+      110deg,
+      hsl(var(--brand-from)),
+      hsl(var(--brand-to))
+    );
+  }
+  .step-badge {
+    @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full
+      bg-primary text-xs font-bold text-primary-foreground;
+  }
+}
+
+/* React Flow tweaks so the canvas doesn't look generic. */
+.react-flow__attribution {
+  display: none;
 }

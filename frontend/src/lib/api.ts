@@ -33,6 +33,20 @@ export interface BaselineResult {
   authoritative: false;
 }
 
+export interface RulesetRule {
+  id: string;
+  tier: "diagnostic" | "suspicious";
+  description: string;
+  citation: string;
+  params: Record<string, number>;
+}
+
+export interface Ruleset {
+  version: string;
+  status: string;
+  rules: RulesetRule[];
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const resp = await fetch(url, {
     method: "POST",
@@ -46,6 +60,10 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 export function getConfig(): Promise<AppConfig> {
   return fetch("/api/config").then((r) => r.json());
+}
+
+export function getRuleset(): Promise<Ruleset> {
+  return fetch("/api/ruleset").then((r) => r.json());
 }
 
 export function evaluateFacts(facts: Facts): Promise<EngineResult> {

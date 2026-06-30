@@ -103,6 +103,16 @@ def test_config_endpoint(client_with_llm):
     assert "crl_mm" in data["fact_fields"]
 
 
+def test_ruleset_endpoint(client_with_llm):
+    data = client_with_llm.get("/api/ruleset").get_json()
+    assert data["version"] == "v1"
+    ids = {r["id"] for r in data["rules"]}
+    assert "crl_no_cardiac" in ids
+    crl = next(r for r in data["rules"] if r["id"] == "crl_no_cardiac")
+    assert crl["params"]["crl_mm"] == 7.0
+    assert crl["tier"] == "diagnostic"
+
+
 def test_cors_header_present(client_with_llm):
     resp = client_with_llm.get("/api/config")
     assert resp.headers["Access-Control-Allow-Origin"] == "*"

@@ -158,6 +158,15 @@ def create_app(
         def assets(filename: str):
             return send_from_directory(dist_dir / "assets", filename)
 
+        @app.get("/<path:path>")
+        def spa_fallback(path: str):
+            # Client-side routes (e.g. /flow) fall back to the SPA shell.
+            if path.startswith("api/"):
+                from flask import abort
+
+                abort(404)
+            return send_from_directory(dist_dir, "index.html")
+
     @app.post("/api/extract")
     def api_extract():
         llm = app.config["EPL_LLM_FN"]
@@ -218,6 +227,25 @@ def create_app(
             prompt_version=PROMPT_VERSION,
             baseline_prompt_version=BASELINE_PROMPT_VERSION,
             fact_fields=list(Facts.field_names()),
+        )
+
+    @app.get("/api/ruleset")
+    def api_ruleset():
+        """Expose the frozen ruleset so the UI's decision flowchart sources its
+        thresholds from the YAML (clinical truth), never from hardcoded values."""
+        return jsonify(
+            version=rules.version,
+            status=rules.status,
+            rules=[
+                {
+                    "id": r.id,
+                    "tier": r.tier,
+                    "description": r.description,
+                    "citation": r.citation,
+                    "params": dict(r.params),
+                }
+                for r in rules.rules
+            ],
         )
 
     @app.post("/api/baseline")
