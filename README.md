@@ -52,6 +52,11 @@ facts manually in panel 2 to drive the engine. To enable extraction, install and
 configure a provider:
 
 ```bash
+# Local model via Ollama (e.g. Gemma) — no API key, no extra Python deps:
+EPL_LLM_PROVIDER=ollama EPL_LLM_MODEL=gemma3 python -m webapp
+# EPL_OLLAMA_HOST defaults to http://localhost:11434
+
+# Or a hosted provider:
 pip install -e ".[webapp,anthropic]"
 ANTHROPIC_API_KEY=... python -m webapp        # or EPL_LLM_PROVIDER=anthropic
 EPL_LLM_MODEL=...                              # optional model override

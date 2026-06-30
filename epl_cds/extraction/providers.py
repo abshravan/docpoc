@@ -17,6 +17,8 @@ from epl_cds.contracts import LLMFn
 
 # Overridable so the demo is not pinned to one model.
 DEFAULT_ANTHROPIC_MODEL = os.environ.get("EPL_LLM_MODEL", "claude-sonnet-4-6")
+DEFAULT_OLLAMA_MODEL = os.environ.get("EPL_LLM_MODEL", "gemma3")
+DEFAULT_OLLAMA_HOST = os.environ.get("EPL_OLLAMA_HOST", "http://localhost:11434")
 
 
 def anthropic_llm_fn(
@@ -49,6 +51,47 @@ def anthropic_llm_fn(
     return _fn
 
 
+def ollama_llm_fn(
+    model: str = DEFAULT_OLLAMA_MODEL,
+    *,
+    host: str = DEFAULT_OLLAMA_HOST,
+    timeout: float = 120.0,
+    temperature: float = 0.0,
+) -> LLMFn:
+    """Return an `llm_fn` backed by a local Ollama server (e.g. Gemma).
+
+    Uses Ollama's HTTP API via the standard library only — no extra dependency.
+    `format=json` constrains the model to valid JSON, and `temperature=0` keeps
+    extraction as reproducible as a local model allows. Extraction-only: the
+    model returns JSON facts and never makes a determination.
+    """
+    import json
+    import urllib.request
+
+    base = host.rstrip("/")
+
+    def _fn(prompt: str) -> str:
+        body = json.dumps(
+            {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": temperature},
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base}/api/generate",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return payload.get("response", "")
+
+    return _fn
+
+
 def default_llm_fn_from_env() -> Optional[LLMFn]:
     """Resolve an `llm_fn` from the environment, or None if none is configured.
 
@@ -67,5 +110,8 @@ def default_llm_fn_from_env() -> Optional[LLMFn]:
 
     if provider == "anthropic":
         return anthropic_llm_fn()
+
+    if provider == "ollama":
+        return ollama_llm_fn()
 
     raise ValueError(f"unknown EPL_LLM_PROVIDER: {provider!r}")
