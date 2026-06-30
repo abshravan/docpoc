@@ -84,9 +84,14 @@ class Ruleset:
     source: str
     status: str
     rules: tuple[Rule, ...]
+    name: str = ""  # human label (e.g. "SRU 2013"); falls back to version
 
     def rule_ids(self) -> tuple[str, ...]:
         return tuple(r.id for r in self.rules)
+
+    @property
+    def label(self) -> str:
+        return self.name or self.version
 
 
 # --------------------------------------------------------------------------- #
@@ -98,6 +103,16 @@ class DeterminationResult:
     fired_rule_ids: tuple[str, ...]
     ruleset_version: str
     rationale: str
+
+
+@dataclass(frozen=True)
+class ComparisonEntry:
+    """One ruleset's deterministic verdict on a case, for cross-guideline
+    comparison. Each entry is a pure engine evaluation — no LLM, no voting."""
+
+    ruleset_label: str
+    ruleset_version: str
+    result: DeterminationResult
 
 
 # --------------------------------------------------------------------------- #

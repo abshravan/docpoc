@@ -1,0 +1,124 @@
+# ILLUSTRATIVE variant ruleset — NOT a published guideline.
+#
+# !!! DO NOT USE CLINICALLY !!!
+# This file exists ONLY to demonstrate cross-guideline concordance in the UI.
+# It reuses the SRU rule structure with deliberately STRICTER (lower) cutoffs
+# resembling the pre-2013 "legacy" thresholds that the SRU 2013 consensus
+# RAISED precisely because the older values produced false-positive loss
+# diagnoses. Comparing this flow against SRU 2013 shows why specificity-
+# protecting thresholds matter.
+#
+# Every value here is UNVERIFIED and illustrative. A real second guideline
+# (e.g. a specific ACOG/ACR encoding) must be transcribed from its source and
+# signed off by a domain expert before it replaces this example.
+#
+# The SRU 2013 paper (Doubilet et al., NEJM 2013;369:1443) discusses these
+# older cutoffs (e.g. MSD-based and smaller-CRL criteria) as prior practice.
+
+version: "legacy-strict-example-v1"
+name: "Legacy strict (EXAMPLE)"
+source: >
+  ILLUSTRATIVE only. Stricter cutoffs resembling pre-2013 practice as described
+  in SRU 2013 (Doubilet et al., NEJM 2013;369:1443). Not a published guideline.
+status: >
+  EXAMPLE / DO NOT USE — illustrative stricter thresholds included solely to
+  demonstrate cross-guideline comparison. Every value is UNVERIFIED.
+
+rules:
+  - id: crl_no_cardiac
+    tier: diagnostic
+    description: "Crown-rump length >= threshold with no cardiac activity."
+    citation: "ILLUSTRATIVE legacy cutoff; see SRU 2013 discussion of prior practice."
+    verify: true
+    params:
+      crl_mm: 5.0
+
+  - id: msd_no_embryo
+    tier: diagnostic
+    description: "Mean sac diameter >= threshold with no embryo."
+    citation: "ILLUSTRATIVE legacy cutoff; see SRU 2013 discussion of prior practice."
+    verify: true
+    params:
+      msd_mm: 16.0
+
+  - id: interval_no_yolk
+    tier: diagnostic
+    description: "No embryo with a heartbeat at or beyond N days after a sac without a yolk sac."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      days: 14
+
+  - id: interval_with_yolk
+    tier: diagnostic
+    description: "No embryo with a heartbeat at or beyond N days after a sac with a yolk sac."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      days: 11
+
+  - id: crl_small_no_cardiac
+    tier: suspicious
+    description: "Crown-rump length < threshold with no cardiac activity."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      crl_max_mm: 5.0
+
+  - id: msd_intermediate_no_embryo
+    tier: suspicious
+    description: "Mean sac diameter in [min, max) mm with no embryo."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      msd_min_mm: 8.0
+      msd_max_mm: 16.0
+
+  - id: interval_no_yolk_suspicious
+    tier: suspicious
+    description: "No embryo with a heartbeat [min, max) days after a sac without a yolk sac."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      days_min: 7
+      days_max: 14
+
+  - id: interval_with_yolk_suspicious
+    tier: suspicious
+    description: "No embryo with a heartbeat [min, max) days after a sac with a yolk sac."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      days_min: 7
+      days_max: 11
+
+  - id: enlarged_yolk_sac
+    tier: suspicious
+    description: "Yolk sac diameter > threshold."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      max_mm: 6.0
+
+  - id: empty_amnion
+    tier: suspicious
+    description: "Amnion seen adjacent to the yolk sac with no visible embryo (empty-amnion sign)."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params: {}
+
+  - id: small_sac_relative_to_embryo
+    tier: suspicious
+    description: "Difference between mean sac diameter and crown-rump length < threshold."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      min_diff_mm: 5.0
+
+  - id: no_embryo_by_lmp
+    tier: suspicious
+    description: "No embryo at or beyond N days after the last menstrual period."
+    citation: "ILLUSTRATIVE; thresholds for demonstration only."
+    verify: true
+    params:
+      days: 42

@@ -7,12 +7,14 @@ import {
 } from "react";
 import { EMPTY_FACTS, type Facts, type FactValue } from "@/lib/facts";
 import {
+  compareRulesets,
   evaluateFacts,
   getConfig,
   getRuleset,
   llmBaseline,
   type AppConfig,
   type BaselineResult,
+  type ComparisonResult,
   type EngineResult,
   type Ruleset,
 } from "@/lib/api";
@@ -24,6 +26,7 @@ interface Store {
   facts: Facts;
   engine: EngineResult | null;
   baseline: BaselineResult | null;
+  comparison: ComparisonResult | null;
   running: boolean;
   error: string;
   setNote: (v: string) => void;
@@ -41,6 +44,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [facts, setFacts] = useState<Facts>(EMPTY_FACTS);
   const [engine, setEngine] = useState<EngineResult | null>(null);
   const [baseline, setBaseline] = useState<BaselineResult | null>(null);
+  const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
 
@@ -61,9 +65,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setRunning(true);
     setError("");
     setBaseline(null);
+    setComparison(null);
     try {
       const result = await evaluateFacts(facts);
       setEngine(result);
+      // Deterministic cross-guideline comparison (independent engine verdicts).
+      compareRulesets(facts).then(setComparison).catch(() => setComparison(null));
       // LLM baseline is independent of the engine and never feeds it.
       if (config?.extraction_enabled && note.trim()) {
         llmBaseline(note).then(setBaseline).catch(() => setBaseline(null));
@@ -82,6 +89,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     facts,
     engine,
     baseline,
+    comparison,
     running,
     error,
     setNote,

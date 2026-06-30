@@ -1,4 +1,4 @@
-import { Cpu, Bot, Lock, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Cpu, Bot, Lock, CheckCircle2, AlertTriangle, Library } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { TIER_LABEL } from "@/lib/facts";
-import type { BaselineResult, EngineResult } from "@/lib/api";
+import type { BaselineResult, ComparisonResult, EngineResult } from "@/lib/api";
 
 const TIER_BG: Record<string, string> = {
   diagnostic_of_loss: "bg-diagnostic",
@@ -34,10 +34,11 @@ function TierBadge({ tier }: { tier: string | null }) {
 interface Props {
   engine: EngineResult | null;
   baseline: BaselineResult | null;
+  comparison: ComparisonResult | null;
   baselineEnabled: boolean;
 }
 
-export function ConclusionsPanel({ engine, baseline, baselineEnabled }: Props) {
+export function ConclusionsPanel({ engine, baseline, comparison, baselineEnabled }: Props) {
   const agreement =
     engine && baseline && baseline.determination
       ? engine.determination === baseline.determination
@@ -130,6 +131,41 @@ export function ConclusionsPanel({ engine, baseline, baselineEnabled }: Props) {
                   ? "LLM baseline agrees with the engine."
                   : "LLM baseline DISAGREES with the engine — the engine governs."}
               </div>
+            )}
+
+            {/* Cross-guideline comparison (deterministic, no voting) */}
+            {comparison && comparison.entries.length > 1 && (
+              <section className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <Library className="h-4 w-4" /> Across guidelines
+                  <Badge
+                    variant={comparison.concordant ? "secondary" : "destructive"}
+                    className="ml-auto"
+                  >
+                    {comparison.concordant ? "concordant" : "divergent"}
+                  </Badge>
+                </div>
+                <ul className="space-y-1.5">
+                  {comparison.entries.map((e) => (
+                    <li key={e.version} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">{e.label}</span>
+                      <span
+                        className={cn(
+                          "rounded px-2 py-0.5 font-semibold text-white",
+                          TIER_BG[e.determination] ?? "bg-muted"
+                        )}
+                      >
+                        {TIER_LABEL[e.determination] ?? e.determination}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {!comparison.concordant && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Guidelines diverge on this case — clinician judgement decides which applies.
+                  </p>
+                )}
+              </section>
             )}
           </>
         )}

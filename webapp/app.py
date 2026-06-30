@@ -25,8 +25,8 @@ from epl_cds.contracts import Facts, LLMFn, Ruleset
 from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
 from epl_cds.extraction.extractor import ExtractionError, extract_facts
 from epl_cds.extraction.prompts import PROMPT_VERSION
-from epl_cds.knowledge import load_ruleset
-from epl_cds.reasoning.engine import evaluate
+from epl_cds.knowledge import load_all_rulesets, load_ruleset
+from epl_cds.reasoning.engine import compare_rulesets, evaluate, is_concordant
 
 # Canonical AG-UI protocol event types (subset we emit). See https://ag-ui.com.
 AGUI_EVENTS = {
@@ -110,6 +110,8 @@ def create_app(
     """
     app = Flask(__name__)
     rules = ruleset if ruleset is not None else load_ruleset()
+    # All human-curated rulesets on disk, for cross-guideline comparison.
+    all_rulesets = load_all_rulesets()
 
     resolved_llm = llm_fn
     if resolved_llm is None:
@@ -245,6 +247,57 @@ def create_app(
                     "params": dict(r.params),
                 }
                 for r in rules.rules
+            ],
+        )
+
+    @app.get("/api/rulesets")
+    def api_rulesets():
+        return jsonify(
+            rulesets=[
+                {
+                    "label": rs.label,
+                    "version": rs.version,
+                    "status": rs.status,
+                    "rule_count": len(rs.rules),
+                }
+                for rs in all_rulesets
+            ]
+        )
+
+    @app.post("/api/compare")
+    def api_compare():
+        """Run the case through every curated ruleset and report concordance.
+
+        Deterministic comparison only — independent engine verdicts, no voting
+        and no LLM. Shows the clinician where guidelines agree or diverge.
+        """
+        data = request.get_json(silent=True) or {}
+        try:
+            facts = facts_from_payload(data.get("facts", {}))
+        except FactsInputError as exc:
+            return jsonify(error=str(exc)), 400
+
+        entries = compare_rulesets(facts, all_rulesets)
+        rules_by_version = {rs.version: {r.id: r for r in rs.rules} for rs in all_rulesets}
+        return jsonify(
+            concordant=is_concordant(entries),
+            entries=[
+                {
+                    "label": e.ruleset_label,
+                    "version": e.ruleset_version,
+                    "determination": e.result.determination.value,
+                    "rationale": e.result.rationale,
+                    "fired_rules": [
+                        {
+                            "id": rid,
+                            "tier": rules_by_version[e.ruleset_version][rid].tier,
+                            "description": rules_by_version[e.ruleset_version][rid].description,
+                            "citation": rules_by_version[e.ruleset_version][rid].citation,
+                        }
+                        for rid in e.result.fired_rule_ids
+                    ],
+                }
+                for e in entries
             ],
         )
 

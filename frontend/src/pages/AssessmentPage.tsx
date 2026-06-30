@@ -33,6 +33,7 @@ export function AssessmentPage() {
         <ConclusionsPanel
           engine={s.engine}
           baseline={s.baseline}
+          comparison={s.comparison}
           baselineEnabled={s.config?.extraction_enabled ?? false}
         />
       </div>

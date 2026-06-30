@@ -113,6 +113,23 @@ def test_ruleset_endpoint(client_with_llm):
     assert crl["tier"] == "diagnostic"
 
 
+def test_rulesets_list_endpoint(client_with_llm):
+    data = client_with_llm.get("/api/rulesets").get_json()
+    labels = {r["label"] for r in data["rulesets"]}
+    assert "SRU 2013" in labels
+    assert len(data["rulesets"]) >= 2
+
+
+def test_compare_endpoint_flags_divergence(client_with_llm):
+    resp = client_with_llm.post(
+        "/api/compare", json={"facts": {"msd_mm": 18, "embryo_visible": False}}
+    )
+    data = resp.get_json()
+    assert data["concordant"] is False
+    dets = {e["label"]: e["determination"] for e in data["entries"]}
+    assert dets["SRU 2013"] == "suspicious_for_loss"
+
+
 def test_cors_header_present(client_with_llm):
     resp = client_with_llm.get("/api/config")
     assert resp.headers["Access-Control-Allow-Origin"] == "*"

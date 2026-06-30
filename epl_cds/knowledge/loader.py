@@ -42,4 +42,18 @@ def load_ruleset(path: Optional[Union[str, Path]] = None) -> Ruleset:
         source=data["source"].strip(),
         status=data["status"].strip(),
         rules=rules,
+        name=str(data.get("name", "")).strip(),
     )
+
+
+def load_all_rulesets(directory: Optional[Union[str, Path]] = None) -> list[Ruleset]:
+    """Load every `epl_ruleset_*.yaml` in the knowledge directory.
+
+    The default ruleset (v1) sorts first; the rest follow by filename. Used for
+    cross-guideline comparison — every ruleset here is human-curated and frozen.
+    """
+    base = Path(directory) if directory is not None else DEFAULT_RULESET_PATH.parent
+    paths = sorted(base.glob("epl_ruleset_*.yaml"))
+    # Keep the default ruleset first for a stable, predictable ordering.
+    paths.sort(key=lambda p: (p != DEFAULT_RULESET_PATH, p.name))
+    return [load_ruleset(p) for p in paths]

@@ -33,6 +33,19 @@ export interface BaselineResult {
   authoritative: false;
 }
 
+export interface ComparisonEntry {
+  label: string;
+  version: string;
+  determination: string;
+  rationale: string;
+  fired_rules: FiredRule[];
+}
+
+export interface ComparisonResult {
+  concordant: boolean;
+  entries: ComparisonEntry[];
+}
+
 export interface RulesetRule {
   id: string;
   tier: "diagnostic" | "suspicious";
@@ -75,4 +88,10 @@ export function evaluateFacts(facts: Facts): Promise<EngineResult> {
 
 export function llmBaseline(note: string): Promise<BaselineResult> {
   return postJson<BaselineResult>("/api/baseline", { note });
+}
+
+export function compareRulesets(facts: Facts): Promise<ComparisonResult> {
+  const clean: Facts = {};
+  for (const [k, v] of Object.entries(facts)) if (v !== null) clean[k] = v;
+  return postJson<ComparisonResult>("/api/compare", { facts: clean });
 }

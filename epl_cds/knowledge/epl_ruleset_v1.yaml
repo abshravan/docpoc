@@ -17,6 +17,7 @@
 #   ACOG Practice Bulletin No. 200, "Early Pregnancy Loss" (2018).
 
 version: "v1"
+name: "SRU 2013"
 source: >
   SRU 2013 Multispecialty Consensus Conference (Doubilet et al., NEJM
   2013;369:1443-1451), cross-referenced with ACOG Practice Bulletin No. 200

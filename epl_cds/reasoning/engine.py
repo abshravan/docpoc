@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable, Mapping
 
 from epl_cds.contracts import (
+    ComparisonEntry,
     Determination,
     DeterminationResult,
     Facts,
@@ -198,3 +199,28 @@ def evaluate(facts: Facts, ruleset: Ruleset) -> DeterminationResult:
         ruleset_version=ruleset.version,
         rationale=rationale,
     )
+
+
+def compare_rulesets(
+    facts: Facts, rulesets: "list[Ruleset] | tuple[Ruleset, ...]"
+) -> tuple[ComparisonEntry, ...]:
+    """Evaluate the same facts under each ruleset (pure, deterministic).
+
+    This is cross-guideline *comparison*, not fusion: each entry is an
+    independent engine verdict. No voting and no probabilistic fusion — the
+    clinician sees where guidelines agree or diverge and decides. No model is
+    involved here; this stays a pure function of (facts, rulesets).
+    """
+    return tuple(
+        ComparisonEntry(
+            ruleset_label=rs.label,
+            ruleset_version=rs.version,
+            result=evaluate(facts, rs),
+        )
+        for rs in rulesets
+    )
+
+
+def is_concordant(entries: "tuple[ComparisonEntry, ...] | list[ComparisonEntry]") -> bool:
+    """True if every ruleset reached the same determination."""
+    return len({e.result.determination for e in entries}) <= 1
