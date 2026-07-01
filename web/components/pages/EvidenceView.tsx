@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { BookOpen, Search, Loader2, Quote } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { BookOpen, Search, Loader2, Quote, Upload, FileText } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   askEvidence,
   getEvidenceStatus,
+  uploadPaper,
   type EvidenceAnswer,
   type EvidenceStatus,
 } from "@/lib/api";
@@ -32,9 +33,28 @@ export function EvidencePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     getEvidenceStatus().then(setStatus).catch(() => setError("Evidence API unavailable."));
   }, []);
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadMsg("");
+    setError("");
+    try {
+      const res = await uploadPaper(file);
+      setUploadMsg(`Added ${res.source} (${res.chunks_added} passages).`);
+      getEvidenceStatus().then(setStatus).catch(() => undefined);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function ask(q: string) {
     const query = q.trim();
@@ -58,10 +78,35 @@ export function EvidencePage() {
           <BookOpen className="h-5 w-5 text-primary" /> Evidence lookup
         </h2>
         <p className="text-sm text-muted-foreground">
-          Retrieval-augmented search over the literature corpus. Answers are grounded in
+          Retrieval-augmented search over the uploaded papers. Answers are grounded in
           and cite retrieved passages. This is explainability — it never affects a determination.
         </p>
       </div>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-3 py-4">
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".txt,.md,application/pdf,image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+            }}
+          />
+          <Button variant="outline" onClick={() => fileInput.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="animate-spin" /> : <Upload />} Upload paper
+          </Button>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <FileText className="h-3.5 w-3.5" />
+            {status?.sources?.length
+              ? status.sources.join(", ")
+              : "no papers loaded yet"}
+          </div>
+          {uploadMsg && <span className="text-xs text-ok">{uploadMsg}</span>}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

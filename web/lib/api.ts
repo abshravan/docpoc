@@ -28,11 +28,28 @@ export interface EngineResult {
   facts: Facts;
 }
 
+export interface RuleDetail {
+  id: string;
+  tier: string;
+  description: string;
+  citation: string;
+  params: Record<string, number>;
+}
+
 export interface RulesetInfo {
   label: string;
   version: string;
   status: string;
   rule_count: number;
+  rules?: RuleDetail[];
+}
+
+export interface ProposedMethod {
+  name: string;
+  description: string;
+  citation: string;
+  status: string;
+  created_at: string;
 }
 
 export interface BaselineResult {
@@ -174,11 +191,18 @@ export function askEvidence(question: string): Promise<EvidenceAnswer> {
   return postJson<EvidenceAnswer>("/api/evidence", { question });
 }
 
+export interface DraftProposal {
+  name: string;
+  description: string;
+  citation: string;
+}
+
 export interface DraftResult {
   yaml: string;
   rule_count: number;
   warnings: string[];
   prompt_version: string;
+  proposals: DraftProposal[];
   activated: false;
 }
 
@@ -188,4 +212,43 @@ export function draftRuleset(
   version: string
 ): Promise<DraftResult> {
   return postJson<DraftResult>("/api/authoring/draft", { source_text, name, version });
+}
+
+export function approveRuleset(
+  yaml: string,
+  approver: string
+): Promise<{ activated: boolean; version: string; label: string }> {
+  return postJson("/api/authoring/approve", { yaml, approver });
+}
+
+export function listProposals(): Promise<{ proposals: ProposedMethod[] }> {
+  return fetch("/api/proposals").then((r) => r.json());
+}
+
+export function addProposal(p: DraftProposal): Promise<{ ok: boolean }> {
+  return postJson("/api/proposals", p);
+}
+
+export function listPapers(): Promise<{ sources: string[] }> {
+  return fetch("/api/papers").then((r) => r.json());
+}
+
+export async function uploadPaper(
+  file: File
+): Promise<{ source: string; chunks_added: number; total_chunks: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch("/api/papers", { method: "POST", body: form });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error || `Upload failed (${resp.status})`);
+  return data;
+}
+
+export async function extractText(file: File): Promise<{ text: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch("/api/extract/text", { method: "POST", body: form });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error || `Extract failed (${resp.status})`);
+  return data;
 }

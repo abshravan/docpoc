@@ -301,6 +301,22 @@ def create_app(
                 result["extract_error"] = f"Could not parse model output: {exc}"
         return jsonify(**result)
 
+    @app.post("/api/extract/text")
+    def api_extract_text():
+        """Extract plain text from an uploaded file (decode text, OCR PDFs/images).
+
+        Used by the authoring flow to turn an uploaded paper into source text.
+        """
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            return jsonify(error="No file uploaded."), 400
+        text = _extract_paper_text(
+            upload.read(), upload.mimetype or "", upload.filename, app.config["EPL_OCR_FN"]
+        )
+        if not text.strip():
+            return jsonify(error="Could not extract text (install tesseract for scans)."), 422
+        return jsonify(text=text)
+
     def _select_ruleset(version: Optional[str]) -> Ruleset:
         if version and version in rulesets_by_version:
             return rulesets_by_version[version]

@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { Activity, FlaskConical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MethodsGrid } from "@/components/MethodsGrid";
 import { cn } from "@/lib/utils";
 import { TIER_LABEL } from "@/lib/facts";
 import { useStore } from "@/store";
@@ -297,11 +298,13 @@ export function FlowPage() {
   const { nodes, edges } = useMemo(() => buildGraph(ruleset, engine), [ruleset, engine]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      <MethodsGrid />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <FlaskConical className="h-5 w-5 text-primary" /> How loss is detected
+            <FlaskConical className="h-5 w-5 text-primary" /> Decision path
           </h2>
           <p className="text-sm text-muted-foreground">
             The SRU 2013 decision logic the engine applies. Thresholds are read live from
