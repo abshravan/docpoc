@@ -21,10 +21,12 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
-from epl_cds.contracts import EmbedFn, Facts, LLMFn, Ruleset
+from epl_cds.contracts import EmbedFn, Facts, LLMFn, OcrFn, Ruleset
 from epl_cds.extraction.authoring import AUTHORING_PROMPT_VERSION, draft_ruleset
 from epl_cds.extraction.baseline import BASELINE_PROMPT_VERSION, llm_baseline_opinion
+from epl_cds.extraction.chat import advisory_chat
 from epl_cds.extraction.extractor import ExtractionError, extract_facts
+from epl_cds.extraction.ocr import OCRUnavailable
 from epl_cds.extraction.prompts import PROMPT_VERSION
 from epl_cds.extraction.rag import VectorStore, answer_question, hashing_embed_fn
 from epl_cds.knowledge import load_all_rulesets, load_ruleset
@@ -118,6 +120,7 @@ def create_app(
     extractor_model: str = "configured-provider",
     embed_fn: Optional[EmbedFn] = None,
     evidence_corpus: Optional[list[tuple[str, str]]] = None,
+    ocr_fn: Optional[OcrFn] = None,
 ) -> Flask:
     """Application factory.
 
@@ -155,10 +158,21 @@ def create_app(
     else:
         _ingest_default_corpus(store)
 
+    # OCR for uploaded files (Tesseract). None when unavailable — the UI then
+    # falls back to pasted text / manual entry.
+    resolved_ocr = ocr_fn
+    if resolved_ocr is None:
+        from epl_cds.extraction.ocr import default_ocr_fn
+
+        resolved_ocr = default_ocr_fn()
+
+    rulesets_by_version = {rs.version: rs for rs in all_rulesets}
+
     app.config["EPL_RULESET"] = rules
     app.config["EPL_LLM_FN"] = resolved_llm
     app.config["EPL_EXTRACTOR_MODEL"] = extractor_model
     app.config["EPL_STORE"] = store
+    app.config["EPL_OCR_FN"] = resolved_ocr
 
     cors_origin = os.environ.get("EPL_CORS_ORIGIN", "*")
 
@@ -226,6 +240,39 @@ def create_app(
             return jsonify(error=f"Could not parse model output: {exc}"), 502
         return jsonify(facts=asdict(facts), prompt_version=PROMPT_VERSION)
 
+    @app.post("/api/extract/file")
+    def api_extract_file():
+        """OCR an uploaded scan file to text, then extract facts from that text.
+
+        OCR is preprocessing; the LLM still only produces facts. Returns the OCR
+        text (for the clinician to see) plus extracted facts when a model is set.
+        """
+        ocr = app.config["EPL_OCR_FN"]
+        if ocr is None:
+            return jsonify(error="OCR is not available on the server (install tesseract)."), 503
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            return jsonify(error="No file uploaded."), 400
+        try:
+            text = ocr(upload.read(), upload.mimetype or "")
+        except OCRUnavailable as exc:
+            return jsonify(error=f"OCR failed: {exc}"), 502
+        text = text.strip()
+        result: dict[str, Any] = {"ocr_text": text}
+        llm = app.config["EPL_LLM_FN"]
+        if llm is not None and text:
+            try:
+                result["facts"] = asdict(extract_facts(text, llm))
+                result["prompt_version"] = PROMPT_VERSION
+            except ExtractionError as exc:
+                result["extract_error"] = f"Could not parse model output: {exc}"
+        return jsonify(**result)
+
+    def _select_ruleset(version: Optional[str]) -> Ruleset:
+        if version and version in rulesets_by_version:
+            return rulesets_by_version[version]
+        return app.config["EPL_RULESET"]
+
     @app.post("/api/evaluate")
     def api_evaluate():
         data = request.get_json(silent=True) or {}
@@ -234,10 +281,11 @@ def create_app(
         except FactsInputError as exc:
             return jsonify(error=str(exc)), 400
 
-        result = evaluate(facts, app.config["EPL_RULESET"])
+        ruleset = _select_ruleset(data.get("ruleset_version"))
+        result = evaluate(facts, ruleset)
 
         # Attach citations for the rules that fired (decision-support context).
-        rules_by_id = {r.id: r for r in app.config["EPL_RULESET"].rules}
+        rules_by_id = {r.id: r for r in ruleset.rules}
         fired = [
             {
                 "id": rid,
@@ -252,13 +300,34 @@ def create_app(
             fired_rules=fired,
             rationale=result.rationale,
             ruleset_version=result.ruleset_version,
+            ruleset_label=ruleset.label,
             facts=asdict(facts),
+        )
+
+    @app.post("/api/chat")
+    def api_chat():
+        """Advisory clinician<->model chat. Never changes the determination."""
+        llm = app.config["EPL_LLM_FN"]
+        if llm is None:
+            return jsonify(error="No model configured for chat."), 503
+        data = request.get_json(silent=True) or {}
+        messages = data.get("messages") or []
+        if not isinstance(messages, list) or not messages:
+            return jsonify(error="No messages provided."), 400
+        facts = data.get("facts") if isinstance(data.get("facts"), dict) else None
+        reply = advisory_chat(messages, facts, app.config["EPL_STORE"], llm)
+        return jsonify(
+            answer=reply.answer,
+            advisory=True,
+            citations=[{"source": c.source, "text": c.text} for c in reply.citations],
         )
 
     @app.get("/api/config")
     def api_config():
         return jsonify(
             extraction_enabled=app.config["EPL_LLM_FN"] is not None,
+            ocr_enabled=app.config["EPL_OCR_FN"] is not None,
+            chat_enabled=app.config["EPL_LLM_FN"] is not None,
             extractor_model=extractor_model,
             ruleset_version=rules.version,
             ruleset_status=rules.status,

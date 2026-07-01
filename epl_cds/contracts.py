@@ -180,3 +180,11 @@ class EmbedFn(Protocol):
     embedder (no network) or against a real embedding model."""
 
     def __call__(self, text: str) -> list[float]: ...  # pragma: no cover - protocol
+
+
+class OcrFn(Protocol):
+    """OCR a scan report file to plain text. This is preprocessing only: the
+    text then goes through the same LLM fact-extraction, so the firewall holds
+    (the LLM still only produces facts). Injected so tests run without Tesseract."""
+
+    def __call__(self, data: bytes, content_type: str) -> str: ...  # pragma: no cover
