@@ -2,6 +2,8 @@ import type { Facts } from "./facts";
 
 export interface AppConfig {
   extraction_enabled: boolean;
+  ocr_enabled: boolean;
+  chat_enabled: boolean;
   extractor_model: string;
   ruleset_version: string;
   ruleset_status: string;
@@ -22,7 +24,15 @@ export interface EngineResult {
   fired_rules: FiredRule[];
   rationale: string;
   ruleset_version: string;
+  ruleset_label?: string;
   facts: Facts;
+}
+
+export interface RulesetInfo {
+  label: string;
+  version: string;
+  status: string;
+  rule_count: number;
 }
 
 export interface BaselineResult {
@@ -79,15 +89,55 @@ export function getRuleset(): Promise<Ruleset> {
   return fetch("/api/ruleset").then((r) => r.json());
 }
 
-export function evaluateFacts(facts: Facts): Promise<EngineResult> {
-  // Drop nulls so the engine treats them as "not documented".
+export function getRulesets(): Promise<{ rulesets: RulesetInfo[] }> {
+  return fetch("/api/rulesets").then((r) => r.json());
+}
+
+function dropNulls(facts: Facts): Facts {
   const clean: Facts = {};
   for (const [k, v] of Object.entries(facts)) if (v !== null) clean[k] = v;
-  return postJson<EngineResult>("/api/evaluate", { facts: clean });
+  return clean;
+}
+
+export function evaluateFacts(facts: Facts, rulesetVersion?: string): Promise<EngineResult> {
+  return postJson<EngineResult>("/api/evaluate", {
+    facts: dropNulls(facts),
+    ruleset_version: rulesetVersion,
+  });
 }
 
 export function llmBaseline(note: string): Promise<BaselineResult> {
   return postJson<BaselineResult>("/api/baseline", { note });
+}
+
+export interface FileExtractResult {
+  ocr_text: string;
+  facts?: Facts;
+  extract_error?: string;
+}
+
+export async function extractFromFile(file: File): Promise<FileExtractResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch("/api/extract/file", { method: "POST", body: form });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error || `Upload failed (${resp.status})`);
+  return data as FileExtractResult;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatReply {
+  answer: string;
+  advisory: true;
+  citations: EvidenceCitation[];
+}
+
+export function chatSend(messages: ChatMessage[], facts: Facts): Promise<ChatReply> {
+  return postJson<ChatReply>("/api/chat", { messages, facts: dropNulls(facts) });
 }
 
 export function compareRulesets(facts: Facts): Promise<ComparisonResult> {

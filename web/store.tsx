@@ -13,17 +13,22 @@ import {
   evaluateFacts,
   getConfig,
   getRuleset,
+  getRulesets,
   llmBaseline,
   type AppConfig,
   type BaselineResult,
   type ComparisonResult,
   type EngineResult,
   type Ruleset,
+  type RulesetInfo,
 } from "@/lib/api";
 
 interface Store {
   config: AppConfig | null;
   ruleset: Ruleset | null;
+  rulesets: RulesetInfo[];
+  selectedRuleset: string;
+  setSelectedRuleset: (version: string) => void;
   note: string;
   facts: Facts;
   engine: EngineResult | null;
@@ -34,7 +39,7 @@ interface Store {
   setNote: (v: string) => void;
   setFact: (name: string, value: FactValue) => void;
   setExtractedFacts: (f: Facts) => void;
-  runAnalysis: () => Promise<void>;
+  runAnalysis: (rulesetVersion?: string) => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -42,6 +47,8 @@ const Ctx = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [ruleset, setRuleset] = useState<Ruleset | null>(null);
+  const [rulesets, setRulesets] = useState<RulesetInfo[]>([]);
+  const [selectedRuleset, setSelectedRuleset] = useState("");
   const [note, setNote] = useState("");
   const [facts, setFacts] = useState<Facts>(EMPTY_FACTS);
   const [engine, setEngine] = useState<EngineResult | null>(null);
@@ -51,8 +58,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getConfig().then(setConfig).catch(() => setError("Could not reach the API."));
+    getConfig()
+      .then((c) => {
+        setConfig(c);
+        setSelectedRuleset((prev) => prev || c.ruleset_version);
+      })
+      .catch(() => setError("Could not reach the API."));
     getRuleset().then(setRuleset).catch(() => undefined);
+    getRulesets().then((r) => setRulesets(r.rulesets)).catch(() => undefined);
   }, []);
 
   function setFact(name: string, value: FactValue) {
@@ -63,13 +76,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setFacts({ ...EMPTY_FACTS, ...f });
   }
 
-  async function runAnalysis() {
+  async function runAnalysis(rulesetVersion?: string) {
+    const version = rulesetVersion || selectedRuleset || undefined;
     setRunning(true);
     setError("");
     setBaseline(null);
     setComparison(null);
     try {
-      const result = await evaluateFacts(facts);
+      const result = await evaluateFacts(facts, version);
       setEngine(result);
       // Deterministic cross-guideline comparison (independent engine verdicts).
       compareRulesets(facts).then(setComparison).catch(() => setComparison(null));
@@ -87,6 +101,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store = {
     config,
     ruleset,
+    rulesets,
+    selectedRuleset,
+    setSelectedRuleset,
     note,
     facts,
     engine,
