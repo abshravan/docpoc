@@ -58,56 +58,52 @@ epl_cds/
   study/                CaseRecord, append-only JSONL log, two-arm metrics
   pipeline.py           orchestrator (extraction -> reasoning -> record)
 webapp/                 Flask JSON/SSE API (+ AG-UI extract stream, Jinja fallback)
-frontend/               React + TS + Tailwind + shadcn/ui SPA (AG-UI client)
+web/                     Next.js + TS + Tailwind + shadcn/ui frontend (AG-UI client)
 config/study_config.yaml safety gates (IRB, de-identification, sign-off)
 scripts/run_study.py    offline demo
 tests/                  boundary tests pinning clinical thresholds
 ```
 
-## Clinician-facing demo UI
+## Clinician-facing UI (`web/`)
 
-A React (Vite + TypeScript + Tailwind + shadcn/ui) front end with a Flask JSON/SSE
-API backend. Three panels make the firewall visible:
+A **Next.js + TypeScript + Tailwind + shadcn/ui** front end over the Flask
+JSON/SSE API. Four pages, all keeping the firewall visible:
 
-1. **Extraction (LLM)** — paste a report; the model proposes structured facts only,
-   streamed to the UI over the **AG-UI protocol** (`@ag-ui/core` events via SSE).
-2. **Verify facts (clinician)** — an editable form bound to the AG-UI agent state;
-   the engine sees only what you confirm.
-3. **Conclusions** — the **deterministic engine** determination (authoritative,
-   with fired-rule citations) shown next to a **non-authoritative LLM baseline**
-   ("what an unconstrained model would say — not used for the decision"), with a
-   badge flagging when the two disagree.
-
-The LLM baseline is a research comparison only; it never feeds the engine or the
-CaseRecord determination (`epl_cds/extraction/baseline.py`).
+- **Assessment** — upload a scan (OCR) or paste text; the model proposes facts
+  (streamed over the **AG-UI protocol**); the clinician verifies; a **guideline
+  dropdown** selects the ruleset; **Conclusions** shows the deterministic verdict
+  (with citations) beside a non-authoritative **LLM baseline** and a
+  disagreement flag; an **advisory chat** discusses the case (never decides).
+- **Decision flow** — a grid of every rule/method (grouped by guideline) plus a
+  live path-highlighting flowchart.
+- **Evidence** — RAG search over uploaded papers, with cited passages.
+- **Authoring** — upload a paper → draft a candidate ruleset → clinician sign-off;
+  approved thresholds become a selectable guideline, novel criteria are queued as
+  non-executable proposals.
 
 ### Run it
 
-Backend (API) + frontend (Vite dev server) in two terminals:
+Backend (API) + frontend (Next.js dev server) in two terminals:
 
 ```bash
-# 1) API backend on :5000  — pick a provider, or none for manual-entry mode
+# 1) API backend on :5000 — pick a provider, or none for manual-entry mode
 EPL_LLM_PROVIDER=ollama EPL_LLM_MODEL=gemma3 python -m webapp   # local Gemma via Ollama
 #   EPL_OLLAMA_HOST defaults to http://localhost:11434
 #   ANTHROPIC_API_KEY=... python -m webapp                      # or a hosted provider
+#   OCR (uploads) needs the tesseract binary: apt-get install tesseract-ocr poppler-utils
+#   and: pip install -e ".[ocr]"
 
-# 2) Frontend dev server on :5173 (proxies /api -> :5000)
-cd frontend && npm install && npm run dev
+# 2) Next.js dev server on :3000 (proxies /api -> :5000)
+cd web && npm install && npm run dev
 ```
 
-Open **http://localhost:5173**. With no provider configured, panel 1 is disabled
-and you enter facts manually in panel 2 to drive the engine offline.
+Open **http://localhost:3000**. With no provider configured, extraction/chat are
+disabled and you enter facts manually to drive the deterministic engine offline.
+`EPL_API_TARGET` overrides the API URL the frontend proxies to.
 
-Single-process production (Flask serves the built SPA):
-
-```bash
-cd frontend && npm run build && cd ..
-EPL_SERVE_FRONTEND=1 EPL_LLM_PROVIDER=ollama python -m webapp   # serves UI + API on :5000
-```
-
-There is also a dependency-free Jinja fallback UI at `/` when `EPL_SERVE_FRONTEND`
-is unset (handy for a quick look without Node). It is a research demo — clearly
-labeled decision support, not a diagnosis or a medical device.
+A dependency-free Jinja fallback UI is also served at the API's `/` (handy for a
+quick look without Node). It is a research demo — clearly labeled decision
+support, not a diagnosis or a medical device.
 
 ## Plugging in a real model
 

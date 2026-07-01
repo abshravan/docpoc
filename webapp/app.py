@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.utils import secure_filename
 
 from epl_cds.contracts import EmbedFn, Facts, LLMFn, OcrFn, Ruleset
@@ -211,22 +211,17 @@ def create_app(
 
     @app.after_request
     def _add_cors(resp):
-        # Allow the Vite dev server (separate origin) to call the API.
+        # Allow the Next.js dev server (separate origin) to call the API.
         resp.headers["Access-Control-Allow-Origin"] = cors_origin
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
 
-    # Single-process production: serve the built React SPA when EPL_SERVE_FRONTEND=1
-    # and a build exists. Dev uses the Vite server (port 5173) against this API.
-    dist_dir = Path(__file__).resolve().parents[1] / "frontend" / "dist"
-    serve_frontend = os.environ.get("EPL_SERVE_FRONTEND") == "1" and (dist_dir / "index.html").exists()
-
     @app.get("/")
     def index():
-        if serve_frontend:
-            return send_from_directory(dist_dir, "index.html")
-        # Lightweight no-build fallback (also what the test suite exercises).
+        # This app is the JSON/SSE API. The primary UI is the Next.js app in
+        # web/ (run separately; it proxies /api here). "/" serves a lightweight,
+        # dependency-free Jinja fallback for a quick look without Node.
         return render_template(
             "index.html",
             ruleset_version=rules.version,
@@ -236,21 +231,6 @@ def create_app(
             extraction_enabled=resolved_llm is not None,
             extractor_model=extractor_model,
         )
-
-    if serve_frontend:
-
-        @app.get("/assets/<path:filename>")
-        def assets(filename: str):
-            return send_from_directory(dist_dir / "assets", filename)
-
-        @app.get("/<path:path>")
-        def spa_fallback(path: str):
-            # Client-side routes (e.g. /flow) fall back to the SPA shell.
-            if path.startswith("api/"):
-                from flask import abort
-
-                abort(404)
-            return send_from_directory(dist_dir, "index.html")
 
     @app.post("/api/extract")
     def api_extract():
