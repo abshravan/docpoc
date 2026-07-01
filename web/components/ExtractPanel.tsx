@@ -88,7 +88,7 @@ export function ExtractPanel({
   }
 
   return (
-    <Card>
+    <Card className="h-full border-t-4 border-t-[hsl(258,60%,52%)]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>

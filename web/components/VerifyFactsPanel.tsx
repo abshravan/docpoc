@@ -86,10 +86,12 @@ function FieldRow({
 
 export function VerifyFactsPanel({ facts, setFact, onRun, running }: Props) {
   return (
-    <Card>
+    <Card className="h-full border-t-4 border-t-[hsl(190,63%,34%)]">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>2 · Verify facts</CardTitle>
+          <CardTitle>
+            <span className="step-badge mr-2">2</span>Verify facts
+          </CardTitle>
           <Badge className="bg-[hsl(190,63%,34%)]">Clinician</Badge>
         </div>
         <CardDescription>

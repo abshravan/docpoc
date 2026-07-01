@@ -71,7 +71,7 @@ export function ConclusionsPanel({
       : null;
 
   return (
-    <Card>
+    <Card className="h-full border-t-4 border-t-[hsl(142,55%,30%)]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>

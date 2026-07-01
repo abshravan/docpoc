@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { ArrowRight, ScanLine, ShieldCheck, Cpu } from "lucide-react";
 import { ExtractPanel } from "@/components/ExtractPanel";
 import { VerifyFactsPanel } from "@/components/VerifyFactsPanel";
 import { ConclusionsPanel } from "@/components/ConclusionsPanel";
@@ -9,25 +10,72 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { useStore } from "@/store";
 
 const panel = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 14 },
   show: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.06, duration: 0.28, ease: "easeOut" as const },
+    transition: { delay: i * 0.07, duration: 0.3, ease: "easeOut" as const },
   }),
 };
+
+const STEPS = [
+  { icon: ScanLine, label: "Extract", sub: "LLM + OCR", color: "hsl(258,60%,52%)" },
+  { icon: ShieldCheck, label: "Verify", sub: "Clinician", color: "hsl(190,63%,34%)" },
+  { icon: Cpu, label: "Decide", sub: "Engine", color: "hsl(142,55%,30%)" },
+];
+
+function FlowStepper() {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border bg-card/70 px-4 py-2.5 shadow-sm">
+      {STEPS.map((s, i) => (
+        <div key={s.label} className="flex items-center gap-2">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.12 }}
+            className="flex items-center gap-2"
+          >
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm"
+              style={{ backgroundColor: s.color }}
+            >
+              <s.icon className="h-4 w-4" />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-sm font-semibold">{s.label}</span>
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">
+                {s.sub}
+              </span>
+            </span>
+          </motion.div>
+          {i < STEPS.length - 1 && (
+            <motion.span
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.12 + 0.06 }}
+              className="mx-1 text-muted-foreground"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </motion.span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function AssessmentPage() {
   const s = useStore();
 
   function selectRuleset(version: string) {
     s.setSelectedRuleset(version);
-    if (s.engine) s.runAnalysis(version); // re-evaluate under the chosen guideline
+    if (s.engine) s.runAnalysis(version);
   }
 
   return (
     <div className="space-y-5">
       <Disclaimer rulesetStatus={s.config?.ruleset_status} />
+      <FlowStepper />
 
       {s.error && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -35,7 +83,7 @@ export function AssessmentPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
         {[
           <ExtractPanel
             key="extract"
