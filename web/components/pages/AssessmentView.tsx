@@ -83,44 +83,56 @@ export function AssessmentPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
-        {[
-          <ExtractPanel
-            key="extract"
-            note={s.note}
-            setNote={s.setNote}
-            extractionEnabled={s.config?.extraction_enabled ?? false}
-            ocrEnabled={s.config?.ocr_enabled ?? false}
-            model={s.config?.extractor_model ?? "—"}
-            onFacts={s.setExtractedFacts}
-          />,
-          <VerifyFactsPanel
-            key="verify"
-            facts={s.facts}
-            setFact={s.setFact}
-            onRun={() => s.runAnalysis()}
-            running={s.running}
-          />,
-          <ConclusionsPanel
-            key="conclude"
-            engine={s.engine}
-            baseline={s.baseline}
-            comparison={s.comparison}
-            baselineEnabled={s.config?.extraction_enabled ?? false}
-            rulesets={s.rulesets}
-            selectedRuleset={s.selectedRuleset}
-            onSelectRuleset={selectRuleset}
-          />,
-        ].map((el, i) => (
-          <motion.div key={i} custom={i} variants={panel} initial="hidden" animate="show">
-            {el}
+      {/* Inputs & results on the left; a tall, always-visible chat on the right. */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <motion.div custom={0} variants={panel} initial="hidden" animate="show">
+            <ExtractPanel
+              note={s.note}
+              setNote={s.setNote}
+              extractionEnabled={s.config?.extraction_enabled ?? false}
+              ocrEnabled={s.config?.ocr_enabled ?? false}
+              model={s.config?.extractor_model ?? "—"}
+              onFacts={s.setExtractedFacts}
+            />
           </motion.div>
-        ))}
-      </div>
+          <motion.div custom={1} variants={panel} initial="hidden" animate="show">
+            <VerifyFactsPanel
+              facts={s.facts}
+              setFact={s.setFact}
+              onRun={() => s.runAnalysis()}
+              running={s.running}
+            />
+          </motion.div>
+          <motion.div
+            custom={2}
+            variants={panel}
+            initial="hidden"
+            animate="show"
+            className="sm:col-span-2"
+          >
+            <ConclusionsPanel
+              engine={s.engine}
+              baseline={s.baseline}
+              comparison={s.comparison}
+              baselineEnabled={s.config?.extraction_enabled ?? false}
+              rulesets={s.rulesets}
+              selectedRuleset={s.selectedRuleset}
+              onSelectRuleset={selectRuleset}
+            />
+          </motion.div>
+        </div>
 
-      <motion.div variants={panel} custom={3} initial="hidden" animate="show">
-        <ChatPanel />
-      </motion.div>
+        <motion.div
+          custom={1.5}
+          variants={panel}
+          initial="hidden"
+          animate="show"
+          className="h-[600px] min-h-[440px] lg:sticky lg:top-6 lg:h-[calc(100vh-6.5rem)]"
+        >
+          <ChatPanel />
+        </motion.div>
+      </div>
     </div>
   );
 }

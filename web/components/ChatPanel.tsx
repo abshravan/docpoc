@@ -86,7 +86,7 @@ export function ChatPanel() {
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b bg-gradient-to-r from-accent/60 to-transparent px-5 py-3">
         <div className="flex items-center gap-2.5">
@@ -105,9 +105,9 @@ export function ChatPanel() {
         </span>
       </div>
 
-      <CardContent className="p-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         {/* Messages */}
-        <div ref={scrollRef} className="max-h-[380px] min-h-[220px] space-y-4 overflow-auto px-5 py-4">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
           {turns.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-8 text-center">
               <motion.div
