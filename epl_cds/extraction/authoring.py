@@ -30,7 +30,7 @@ import yaml
 from epl_cds.contracts import LLMFn
 from epl_cds.knowledge.validator import RulesetValidationError, validate_ruleset_data
 
-AUTHORING_PROMPT_VERSION = "a1"
+AUTHORING_PROMPT_VERSION = "a2"
 
 # The criteria the deterministic engine understands. The model fills thresholds
 # for these; it does not get to invent ids, tiers, or the comparison logic.
@@ -69,6 +69,9 @@ class DraftResult:
     warnings: list[str] = field(default_factory=list)
     prompt_version: str = AUTHORING_PROMPT_VERSION
     rule_count: int = 0
+    # Novel criteria the source describes that the engine does NOT implement.
+    # These are non-executable proposals for human review, never auto-activated.
+    proposals: list[dict] = field(default_factory=list)
 
 
 def _catalog_for_prompt() -> str:
@@ -88,10 +91,17 @@ Omit any criterion the source does not address.
 Known criteria (id [tier] params):
 {catalog}
 
+Also list any additional diagnostic criteria the source describes that are NOT
+in the known list — these are proposals for a human to review, not something you
+should force into a known id.
+
 Return a single JSON object and nothing else:
 {{
   "rules": [
     {{"id": "<known id>", "params": {{"<param>": <number>}}, "citation": "<where in source>"}}
+  ],
+  "proposals": [
+    {{"name": "<short name>", "description": "<what/threshold>", "citation": "<where in source>"}}
   ]
 }}
 
@@ -181,12 +191,28 @@ def draft_ruleset(
         except RulesetValidationError as exc:
             warnings.append(f"draft failed structural validation: {exc}")
 
+    proposals: list[dict] = []
+    for entry in payload.get("proposals", []) if isinstance(payload, dict) else []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        proposals.append(
+            {
+                "name": name,
+                "description": str(entry.get("description") or "").strip(),
+                "citation": str(entry.get("citation") or source_label).strip(),
+            }
+        )
+
     yaml_text = _to_yaml(data)
     return DraftResult(
         yaml_text=yaml_text,
         data=data,
         warnings=warnings,
         rule_count=len(rules),
+        proposals=proposals,
     )
 
 

@@ -46,14 +46,30 @@ def load_ruleset(path: Optional[Union[str, Path]] = None) -> Ruleset:
     )
 
 
-def load_all_rulesets(directory: Optional[Union[str, Path]] = None) -> list[Ruleset]:
-    """Load every `epl_ruleset_*.yaml` in the knowledge directory.
+def load_all_rulesets(
+    directory: Optional[Union[str, Path]] = None,
+    extra_dirs: Optional[list[Union[str, Path]]] = None,
+) -> list[Ruleset]:
+    """Load every packaged `epl_ruleset_*.yaml`, plus any `*.yaml` in `extra_dirs`.
 
-    The default ruleset (v1) sorts first; the rest follow by filename. Used for
-    cross-guideline comparison — every ruleset here is human-curated and frozen.
+    The default ruleset (v1) sorts first; the rest follow. `extra_dirs` is where
+    clinician-approved (threshold-only) rulesets live at runtime, outside the
+    frozen package knowledge.
     """
     base = Path(directory) if directory is not None else DEFAULT_RULESET_PATH.parent
-    paths = sorted(base.glob("epl_ruleset_*.yaml"))
+    paths = list(base.glob("epl_ruleset_*.yaml"))
+    for extra in extra_dirs or []:
+        extra_path = Path(extra)
+        if extra_path.is_dir():
+            paths.extend(sorted(extra_path.glob("*.yaml")))
     # Keep the default ruleset first for a stable, predictable ordering.
-    paths.sort(key=lambda p: (p != DEFAULT_RULESET_PATH, p.name))
-    return [load_ruleset(p) for p in paths]
+    paths.sort(key=lambda p: (p != DEFAULT_RULESET_PATH, str(p)))
+    seen: set[str] = set()
+    rulesets: list[Ruleset] = []
+    for p in paths:
+        rs = load_ruleset(p)
+        if rs.version in seen:
+            continue  # first occurrence wins (packaged over approved)
+        seen.add(rs.version)
+        rulesets.append(rs)
+    return rulesets

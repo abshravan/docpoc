@@ -17,9 +17,12 @@ import uuid
 from dataclasses import asdict
 from typing import Any, Iterator, Optional
 
+from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from werkzeug.utils import secure_filename
 
 from epl_cds.contracts import EmbedFn, Facts, LLMFn, OcrFn, Ruleset
 from epl_cds.extraction.authoring import AUTHORING_PROMPT_VERSION, draft_ruleset
@@ -30,7 +33,9 @@ from epl_cds.extraction.ocr import OCRUnavailable
 from epl_cds.extraction.prompts import PROMPT_VERSION
 from epl_cds.extraction.rag import VectorStore, answer_question, hashing_embed_fn
 from epl_cds.knowledge import load_all_rulesets, load_ruleset
-from epl_cds.reasoning.engine import compare_rulesets, evaluate, is_concordant
+from epl_cds.knowledge.validator import RulesetValidationError, validate_ruleset_data
+from epl_cds.reasoning.engine import RULE_EVALUATORS, compare_rulesets, evaluate, is_concordant
+from epl_cds.registry import ProposedMethod, append_proposal, load_proposals
 
 # Canonical AG-UI protocol event types (subset we emit). See https://ag-ui.com.
 AGUI_EVENTS = {
@@ -49,17 +54,31 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-def _ingest_default_corpus(store: VectorStore) -> None:
-    """Ingest the shipped example notes plus any files under data/papers/."""
+def _ingest_default_corpus(store: VectorStore, papers_dir: Path) -> None:
+    """Ingest the shipped example notes plus any uploaded papers."""
     root = Path(__file__).resolve().parents[1]
     example = root / "examples" / "evidence_notes.md"
     if example.exists():
         store.add_text(example.read_text(encoding="utf-8"), example.name)
-    papers = root / "data" / "papers"
-    if papers.is_dir():
-        for path in sorted(papers.glob("*")):
+    if papers_dir.is_dir():
+        for path in sorted(papers_dir.glob("*")):
             if path.suffix.lower() in {".md", ".txt"}:
                 store.add_text(path.read_text(encoding="utf-8"), path.name)
+
+
+def _extract_paper_text(raw: bytes, content_type: str, name: str, ocr) -> str:
+    """Get text from an uploaded paper: decode text files, OCR PDFs/images."""
+    ct = (content_type or "").lower()
+    lname = name.lower()
+    if lname.endswith((".txt", ".md")) or ct.startswith("text/"):
+        return raw.decode("utf-8", errors="ignore")
+    if ocr is not None and ("pdf" in ct or ct.startswith("image/") or lname.endswith(".pdf")):
+        try:
+            return ocr(raw, content_type)
+        except OCRUnavailable:
+            return ""
+    # Last resort: try to decode as text.
+    return raw.decode("utf-8", errors="ignore")
 
 _BOOL_FIELDS = {"cardiac_activity", "embryo_visible", "yolk_sac_visible", "amnion_visible"}
 _INT_FIELDS = {"days_since_sac_without_yolk", "days_since_sac_with_yolk", "days_since_lmp"}
@@ -121,6 +140,7 @@ def create_app(
     embed_fn: Optional[EmbedFn] = None,
     evidence_corpus: Optional[list[tuple[str, str]]] = None,
     ocr_fn: Optional[OcrFn] = None,
+    data_dir: Optional[str] = None,
 ) -> Flask:
     """Application factory.
 
@@ -130,8 +150,19 @@ def create_app(
     """
     app = Flask(__name__)
     rules = ruleset if ruleset is not None else load_ruleset()
-    # All human-curated rulesets on disk, for cross-guideline comparison.
-    all_rulesets = load_all_rulesets()
+
+    # Runtime data locations (gitignored). Tests pass a tmp data_dir.
+    base_data = Path(data_dir) if data_dir else Path("data")
+    papers_dir = base_data / "papers"
+    approved_rulesets_dir = base_data / "rulesets"
+    proposals_path = base_data / "proposed_methods.jsonl"
+
+    def _load_rulesets():
+        rs = load_all_rulesets(extra_dirs=[approved_rulesets_dir])
+        return rs, {r.version: r for r in rs}
+
+    # All rulesets: packaged + clinician-approved, for comparison and selection.
+    all_rulesets, rulesets_by_version = _load_rulesets()
 
     resolved_llm = llm_fn
     if resolved_llm is None:
@@ -156,7 +187,7 @@ def create_app(
         for text, source in evidence_corpus:
             store.add_text(text, source)
     else:
-        _ingest_default_corpus(store)
+        _ingest_default_corpus(store, papers_dir)
 
     # OCR for uploaded files (Tesseract). None when unavailable — the UI then
     # falls back to pasted text / manual entry.
@@ -166,7 +197,9 @@ def create_app(
 
         resolved_ocr = default_ocr_fn()
 
-    rulesets_by_version = {rs.version: rs for rs in all_rulesets}
+    def _rebuild_rulesets():
+        nonlocal all_rulesets, rulesets_by_version
+        all_rulesets, rulesets_by_version = _load_rulesets()
 
     app.config["EPL_RULESET"] = rules
     app.config["EPL_LLM_FN"] = resolved_llm
@@ -410,8 +443,114 @@ def create_app(
             rule_count=draft.rule_count,
             warnings=draft.warnings,
             prompt_version=draft.prompt_version,
+            proposals=draft.proposals,
             activated=False,
         )
+
+    @app.post("/api/authoring/approve")
+    def api_authoring_approve():
+        """Approve a threshold-only draft into a selectable ruleset.
+
+        FIREWALL GUARD: only rulesets whose every rule id has a coded engine
+        evaluator can be approved. A draft that references a novel criterion is
+        rejected — that path goes to the proposals queue for a developer, not to
+        the live engine. Records the approver + timestamp for the audit trail.
+        """
+        data = request.get_json(silent=True) or {}
+        yaml_text = data.get("yaml") or ""
+        approver = str(data.get("approver") or "").strip()
+        if not yaml_text.strip():
+            return jsonify(error="No ruleset YAML provided."), 400
+        if not approver:
+            return jsonify(error="An approver name is required (sign-off record)."), 400
+        try:
+            parsed = yaml.safe_load(yaml_text)
+        except yaml.YAMLError as exc:
+            return jsonify(error=f"Invalid YAML: {exc}"), 400
+        try:
+            validate_ruleset_data(parsed)
+        except RulesetValidationError as exc:
+            return jsonify(error=f"Ruleset failed validation: {exc}"), 400
+
+        unknown = sorted({r["id"] for r in parsed["rules"] if r["id"] not in RULE_EVALUATORS})
+        if unknown:
+            return (
+                jsonify(
+                    error=(
+                        "Cannot approve: these criteria have no coded engine "
+                        f"evaluator and cannot be executed safely: {unknown}. "
+                        "Queue them as proposals for implementation instead."
+                    )
+                ),
+                422,
+            )
+
+        version = str(parsed.get("version") or "").strip()
+        if version in rulesets_by_version:
+            return jsonify(error=f"Ruleset version {version!r} already exists."), 409
+
+        stamp = datetime.now(timezone.utc).isoformat()
+        parsed["status"] = f"APPROVED by {approver} on {stamp}. " + str(parsed.get("status", ""))
+        approved_rulesets_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = secure_filename(version) or "approved"
+        (approved_rulesets_dir / f"{safe_name}.yaml").write_text(
+            yaml.safe_dump(parsed, sort_keys=False), encoding="utf-8"
+        )
+        _rebuild_rulesets()
+        return jsonify(activated=True, version=version, label=parsed.get("name") or version)
+
+    @app.get("/api/proposals")
+    def api_proposals():
+        methods = load_proposals(proposals_path)
+        return jsonify(
+            proposals=[
+                {
+                    "name": m.name,
+                    "description": m.description,
+                    "citation": m.citation,
+                    "status": m.status,
+                    "created_at": m.created_at,
+                }
+                for m in methods
+            ]
+        )
+
+    @app.post("/api/proposals")
+    def api_add_proposal():
+        """Queue a novel criterion as a NON-EXECUTABLE proposal for a developer."""
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name") or "").strip()
+        if not name:
+            return jsonify(error="A proposal name is required."), 400
+        append_proposal(
+            proposals_path,
+            ProposedMethod(
+                name=name,
+                description=str(data.get("description") or "").strip(),
+                citation=str(data.get("citation") or "").strip(),
+            ),
+        )
+        return jsonify(ok=True)
+
+    @app.get("/api/papers")
+    def api_papers():
+        return jsonify(sources=store.sources)
+
+    @app.post("/api/papers")
+    def api_upload_paper():
+        """Ingest an uploaded reference paper into the RAG corpus (evidence + chat)."""
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            return jsonify(error="No file uploaded."), 400
+        raw = upload.read()
+        name = secure_filename(upload.filename) or "paper"
+        text = _extract_paper_text(raw, upload.mimetype or "", name, app.config["EPL_OCR_FN"])
+        if not text.strip():
+            return jsonify(error="Could not extract text from the file."), 422
+        papers_dir.mkdir(parents=True, exist_ok=True)
+        (papers_dir / f"{name}.txt").write_text(text, encoding="utf-8")
+        added = store.add_text(text, name)
+        return jsonify(source=name, chunks_added=added, total_chunks=store.size)
 
     @app.get("/api/rulesets")
     def api_rulesets():
@@ -422,6 +561,16 @@ def create_app(
                     "version": rs.version,
                     "status": rs.status,
                     "rule_count": len(rs.rules),
+                    "rules": [
+                        {
+                            "id": r.id,
+                            "tier": r.tier,
+                            "description": r.description,
+                            "citation": r.citation,
+                            "params": dict(r.params),
+                        }
+                        for r in rs.rules
+                    ],
                 }
                 for rs in all_rulesets
             ]
