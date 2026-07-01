@@ -83,7 +83,15 @@ JSON/SSE API. Four pages, all keeping the firewall visible:
 
 ### Run it
 
-Backend (API) + frontend (Next.js dev server) in two terminals:
+**Fastest — one-shot setup script** (installs OCR deps, a Python venv, and web deps):
+
+```bash
+./scripts/setup-linux.sh     # Debian/Ubuntu/Fedora/Arch
+./scripts/setup-macos.sh     # macOS (uses Homebrew)
+```
+
+It prints the exact run commands when done. Or set it up manually —
+backend (API) + frontend (Next.js dev server) in two terminals:
 
 ```bash
 # 1) API backend on :5000 — pick a provider, or none for manual-entry mode
